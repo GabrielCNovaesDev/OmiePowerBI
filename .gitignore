@@ -1,0 +1,5 @@
+.env
+.env.local
+*.pem
+.neon
+node_modules/

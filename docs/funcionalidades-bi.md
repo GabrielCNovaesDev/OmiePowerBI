@@ -4,6 +4,8 @@ Documento de visão das funcionalidades que o dashboard BI deve cobrir. Serve co
 
 Escopo: dados do ERP Omie, atualizados automaticamente, com visualização estilo Business Intelligence (não apenas listagens operacionais).
 
+**MVP atual:** só financeiro (caixa, a receber, a pagar). Recorte e endpoints em `docs/mvp-financeiro.md`. O restante deste arquivo é backlog.
+
 ---
 
 ## 1. Visão executiva
