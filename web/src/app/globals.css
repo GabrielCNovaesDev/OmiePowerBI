@@ -14,8 +14,11 @@
   --color-gain: #2f9e6b;
   --color-loss: #d1495b;
   --color-warn: #e3b341;
+  --color-gold: #d4af37;
+  --color-gold-2: #c4a056;
   --color-paper: #f7f9fb;
   --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-brand: var(--font-montserrat), ui-sans-serif, system-ui, sans-serif;
 }
 
 html,

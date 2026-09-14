@@ -152,7 +152,7 @@ async function CaixaCheck({ filter }: { filter?: DimFilter }) {
           <p className="text-2xl font-semibold">{money(omieSaldo)}</p>
         </div>
         <div>
-          <p className="text-xs text-mist">Valor em conta (Nexo BI)</p>
+          <p className="text-xs text-mist">Valor em conta (Costa Novaes BI)</p>
           <p className="text-2xl font-semibold">{money(saldo.saldo)}</p>
         </div>
       </div>

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
+import { Geist, Montserrat } from "next/font/google";
 import { Suspense } from "react";
 import { Shell } from "@/components/shell";
 import { formatDateTime } from "@/lib/format";
@@ -13,9 +13,15 @@ const geist = Geist({
   variable: "--font-geist",
 });
 
+const brand = Montserrat({
+  subsets: ["latin"],
+  weight: ["500", "600"],
+  variable: "--font-montserrat",
+});
+
 export const metadata: Metadata = {
-  title: "Nexo BI",
-  description: "Dashboards financeiros Omie no formato Business Indicator.",
+  title: "Costa Novaes BI",
+  description: "Dashboards financeiros Omie da Costa Novaes Consultoria Empresarial.",
 };
 
 export const dynamic = "force-dynamic";
@@ -41,7 +47,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang="pt-BR">
-      <body className={`${geist.variable} font-sans antialiased`}>
+      <body className={`${geist.variable} ${brand.variable} font-sans antialiased`}>
         <Suspense fallback={null}>
           <Shell company={company} lastSync={lastSync} filterOptions={filterOptions}>
             {children}

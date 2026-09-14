@@ -19,7 +19,7 @@ export default async function ValidacaoPage({
     <div className="space-y-5">
       <PageHeader
         kicker="Relatórios"
-        title="Validação Omie & Nexo BI"
+        title="Validação Omie & Costa Novaes BI"
         subtitle="Conferir os totais do ERP com o que o BI calculou a partir da API. Os valores são da sua empresa, não dos prints."
       />
       <div className="flex gap-2">
@@ -39,7 +39,7 @@ export default async function ValidacaoPage({
         </p>
       </Card>
       <Card>
-        <p className="mb-3 text-sm font-semibold text-cyan-2">2. Nexo BI · compare com o relatório acima</p>
+        <p className="mb-3 text-sm font-semibold text-cyan-2">2. Costa Novaes BI · compare com o relatório acima</p>
         {tipo === "fluxo" ? (
           <ComboCashflow
             labels={months.map((m) => m.label)}

@@ -1,3 +1,4 @@
+import { BrandMark } from "./brand";
 import { DashTabs, ReportNav } from "./nav";
 import { FilterRail, type FilterOptions } from "./filters";
 
@@ -15,9 +16,8 @@ export function Shell({
   return (
     <div className="min-h-screen bg-bg">
       <header className="sticky top-0 z-20 flex flex-wrap items-center gap-4 border-b border-black/20 bg-header px-4 py-3">
-        <div className="min-w-[140px]">
-          <p className="text-lg font-semibold tracking-tight text-white">Nexo BI</p>
-          <p className="text-[10px] uppercase tracking-[0.18em] text-cyan">App Omie</p>
+        <div className="min-w-[168px]">
+          <BrandMark />
         </div>
         <div className="min-w-0 flex-1">
           <DashTabs />
