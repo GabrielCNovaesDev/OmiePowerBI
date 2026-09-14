@@ -8,23 +8,18 @@ export default async function SyncPage() {
   const divergencias = rec.filter((r) => r.toleravel === false);
 
   return (
-    <div>
-      <PageHeader
-        kicker="Qualidade"
-        title="Sync e reconciliação"
-        subtitle="Conferência entre o que a Omie diz no Resumo e o que está no nosso banco."
-      />
+    <div className="space-y-4">
+      <PageHeader kicker="Relatórios" title="Qualidade e sync" subtitle="Conferência entre o Resumo Omie e os fatos no Postgres." />
       <section className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
-        <Kpi label="Clientes" value={String(n(counts.clientes))} />
-        <Kpi label="Categorias" value={String(n(counts.categorias))} />
-        <Kpi label="Contas" value={String(n(counts.contas))} />
-        <Kpi label="Títulos" value={String(n(counts.titulos))} />
-        <Kpi label="Baixas" value={String(n(counts.baixas))} />
-        <Kpi label="Extrato" value={String(n(counts.extrato))} />
+        <Kpi label="Clientes" value={String(n(counts.clientes))} compact />
+        <Kpi label="Categorias" value={String(n(counts.categorias))} compact />
+        <Kpi label="Contas" value={String(n(counts.contas))} compact />
+        <Kpi label="Títulos" value={String(n(counts.titulos))} compact />
+        <Kpi label="Baixas" value={String(n(counts.baixas))} compact />
+        <Kpi label="Extrato" value={String(n(counts.extrato))} compact />
       </section>
-
-      <section className="mt-8">
-        <h2 className="mb-3 font-serif text-xl">Reconciliação</h2>
+      <section>
+        <h2 className="mb-3 text-lg font-semibold">Reconciliação</h2>
         <p className="mb-3 text-sm text-mist">
           {divergencias.length
             ? `${divergencias.length} métrica(s) fora da tolerância de R$ 0,01.`
@@ -32,18 +27,11 @@ export default async function SyncPage() {
         </p>
         <DataTable
           headers={["Métrica", "Omie", "BI", "Diferença", "Ok"]}
-          rows={rec.map((r) => [
-            String(r.metrica),
-            money(n(r.valor_omie)),
-            money(n(r.valor_bi)),
-            money(n(r.diferenca)),
-            r.toleravel ? "sim" : "não",
-          ])}
+          rows={rec.map((r) => [String(r.metrica), money(n(r.valor_omie)), money(n(r.valor_bi)), money(n(r.diferenca)), r.toleravel ? "sim" : "não"])}
         />
       </section>
-
-      <section className="mt-8">
-        <h2 className="mb-3 font-serif text-xl">Log de sincronização</h2>
+      <section>
+        <h2 className="mb-3 text-lg font-semibold">Log de sincronização</h2>
         <DataTable
           headers={["Método", "Status", "Registros", "Páginas", "Duração", "Fim", "Erro"]}
           rows={logs.map((l) => [

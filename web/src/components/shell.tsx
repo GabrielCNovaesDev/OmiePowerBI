@@ -1,4 +1,5 @@
-import { Nav } from "./nav";
+import { DashTabs, ReportNav } from "./nav";
+import { FilterRail } from "./filters";
 
 export function Shell({
   children,
@@ -10,19 +11,29 @@ export function Shell({
   lastSync?: string | null;
 }) {
   return (
-    <div className="min-h-screen grid grid-cols-1 lg:grid-cols-[240px_1fr]">
-      <aside className="border-b lg:border-b-0 lg:border-r border-line bg-ink-2 px-5 py-8 flex flex-col gap-10">
-        <div>
-          <p className="font-serif text-2xl tracking-tight text-gold-2">Nexo</p>
-          <p className="mt-1 text-xs uppercase tracking-[0.18em] text-mist">Financeiro</p>
+    <div className="min-h-screen bg-bg">
+      <header className="sticky top-0 z-20 flex flex-wrap items-center gap-4 border-b border-black/20 bg-header px-4 py-3">
+        <div className="min-w-[140px]">
+          <p className="text-lg font-semibold tracking-tight text-white">Nexo BI</p>
+          <p className="text-[10px] uppercase tracking-[0.18em] text-cyan">App Omie</p>
         </div>
-        <Nav />
-        <div className="mt-auto text-[11px] text-mist leading-relaxed">
-          <p className="text-paper/80">{company || "Omie BI"}</p>
-          {lastSync ? <p className="mt-1">Atualizado {lastSync}</p> : <p className="mt-1">Aguardando primeira carga</p>}
+        <div className="min-w-0 flex-1">
+          <DashTabs />
         </div>
-      </aside>
-      <main className="px-6 py-8 md:px-10 max-w-[1400px] w-full">{children}</main>
+        <div className="text-right text-[11px] text-white/60">
+          <p className="text-white/80">{company || "Omie"}</p>
+          <p>{lastSync ? `Atualizado ${lastSync}` : "Aguardando primeira carga"}</p>
+        </div>
+      </header>
+      <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr]">
+        <aside className="bg-header px-4 py-5 lg:min-h-[calc(100vh-64px)]">
+          <ReportNav />
+          <div className="mt-8">
+            <FilterRail />
+          </div>
+        </aside>
+        <main className="min-w-0 px-4 py-5 md:px-6">{children}</main>
+      </div>
     </div>
   );
 }
@@ -37,10 +48,10 @@ export function PageHeader({
   subtitle?: string;
 }) {
   return (
-    <header className="mb-8">
-      <p className="text-[11px] uppercase tracking-[0.2em] text-gold">{kicker}</p>
-      <h1 className="mt-2 font-serif text-4xl tracking-tight">{title}</h1>
-      {subtitle ? <p className="mt-2 text-mist max-w-2xl">{subtitle}</p> : null}
+    <header className="mb-5">
+      <p className="text-[11px] uppercase tracking-[0.18em] text-cyan-2">{kicker}</p>
+      <h1 className="mt-1 text-2xl font-semibold tracking-tight">{title}</h1>
+      {subtitle ? <p className="mt-1 max-w-3xl text-sm text-mist">{subtitle}</p> : null}
     </header>
   );
 }

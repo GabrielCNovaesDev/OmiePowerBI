@@ -1,101 +1,244 @@
 "use client";
 
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Legend,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
+import dynamic from "next/dynamic";
+import type { EChartsOption } from "echarts";
+import { compactMoney } from "@/lib/format";
 
-const axis = { fill: "#8b9bb0", fontSize: 11 };
-const grid = { stroke: "#263140" };
-const tooltipStyle = {
-  background: "#141b24",
-  border: "1px solid #263140",
-  borderRadius: 8,
-  color: "#eef3f8",
+const ReactECharts = dynamic(() => import("echarts-for-react"), { ssr: false });
+
+const COLORS = {
+  receive: "#4ea3d9",
+  pay: "#e06a6a",
+  cyan: "#00c2d4",
+  gold: "#e3b341",
+  gain: "#2f9e6b",
+  ink: "#1c2430",
+  mist: "#6b7787",
+  grid: "#e4e9ee",
 };
 
-export function CashflowChart({
-  data,
-}: {
-  data: Array<{ mes: string; receber: number; pagar: number }>;
-}) {
-  if (!data.length) {
-    return <p className="py-16 text-center text-sm text-mist">Sem baixas nesta carga ainda.</p>;
+function Chart({ option, height = 280, empty }: { option: EChartsOption | null; height?: number; empty?: string }) {
+  if (!option) {
+    return <p className="py-14 text-center text-sm text-mist">{empty ?? "Sem dados neste recorte."}</p>;
   }
-  return (
-    <div className="h-72 w-full">
-      <ResponsiveContainer>
-        <BarChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" {...grid} vertical={false} />
-          <XAxis dataKey="mes" tick={axis} />
-          <YAxis tick={axis} tickFormatter={(v: number) => `${Math.round(v / 1000)}k`} />
-          <Tooltip contentStyle={tooltipStyle} />
-          <Legend />
-          <Bar dataKey="receber" name="Recebido" fill="#4ade80" radius={[4, 4, 0, 0]} />
-          <Bar dataKey="pagar" name="Pago" fill="#fb7185" radius={[4, 4, 0, 0]} />
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
+  return <ReactECharts option={option} style={{ height }} notMerge lazyUpdate />;
 }
 
-export function AgingChart({ data }: { data: Array<{ faixa: string; valor: number }> }) {
-  const labels: Record<string, string> = {
-    "0_a_vencer": "A vencer",
-    "1_ate_7d": "1–7 d",
-    "2_ate_15d": "8–15 d",
-    "3_ate_30d": "16–30 d",
-    "4_ate_60d": "31–60 d",
-    "5_acima_60d": "60+ d",
+const moneyAxis = {
+  type: "value" as const,
+  axisLabel: { color: COLORS.mist, formatter: (v: number) => compactMoney(v) },
+  splitLine: { lineStyle: { color: COLORS.grid } },
+};
+
+export function ComboCashflow({
+  labels,
+  entradas,
+  saidas,
+  saldo,
+  height = 320,
+}: {
+  labels: string[];
+  entradas: number[];
+  saidas: number[];
+  saldo: number[];
+  height?: number;
+}) {
+  if (!labels.length) return <Chart option={null} />;
+  const option: EChartsOption = {
+    tooltip: { trigger: "axis" },
+    legend: { data: ["Entrada", "Saída", "Saldo em conta"], bottom: 0, textStyle: { color: COLORS.mist } },
+    grid: { left: 56, right: 56, top: 24, bottom: 48 },
+    xAxis: { type: "category", data: labels, axisLabel: { color: COLORS.mist } },
+    yAxis: [
+      moneyAxis,
+      { ...moneyAxis, position: "right" },
+    ],
+    series: [
+      { name: "Entrada", type: "bar", data: entradas, itemStyle: { color: COLORS.receive, borderRadius: [3, 3, 0, 0] }, barGap: "10%" },
+      { name: "Saída", type: "bar", data: saidas, itemStyle: { color: COLORS.pay, borderRadius: [3, 3, 0, 0] } },
+      { name: "Saldo em conta", type: "line", yAxisIndex: 1, data: saldo, itemStyle: { color: COLORS.gold }, lineStyle: { width: 3 }, symbolSize: 8 },
+    ],
   };
-  const mapped = data.map((d) => ({ ...d, label: labels[d.faixa] || d.faixa }));
-  if (!mapped.length) {
-    return <p className="py-16 text-center text-sm text-mist">Carteira aberta ainda vazia — a carga de títulos pode estar em andamento.</p>;
-  }
-  return (
-    <div className="h-64 w-full">
-      <ResponsiveContainer>
-        <BarChart data={mapped}>
-          <CartesianGrid strokeDasharray="3 3" {...grid} vertical={false} />
-          <XAxis dataKey="label" tick={axis} />
-          <YAxis tick={axis} tickFormatter={(v: number) => `${Math.round(v / 1000)}k`} />
-          <Tooltip contentStyle={tooltipStyle} />
-          <Bar dataKey="valor" name="Aberto" fill="#d4a853" radius={[4, 4, 0, 0]} />
-        </BarChart>
-      </ResponsiveContainer>
-    </div>
-  );
+  return <Chart option={option} height={height} />;
 }
 
-export function ProjectionChart({
-  data,
+export function DailyCashflow({
+  labels,
+  entradas,
+  saidas,
+  saldo,
+  height = 220,
 }: {
-  data: Array<{ dia: string; receber: number; pagar: number }>;
+  labels: string[];
+  entradas: number[];
+  saidas: number[];
+  saldo: number[];
+  height?: number;
 }) {
-  if (!data.length) {
-    return <p className="py-16 text-center text-sm text-mist">Sem títulos em aberto no horizonte de 45 dias.</p>;
-  }
-  return (
-    <div className="h-72 w-full">
-      <ResponsiveContainer>
-        <LineChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" {...grid} vertical={false} />
-          <XAxis dataKey="dia" tick={axis} />
-          <YAxis tick={axis} tickFormatter={(v: number) => `${Math.round(v / 1000)}k`} />
-          <Tooltip contentStyle={tooltipStyle} />
-          <Legend />
-          <Line type="monotone" dataKey="receber" name="A receber" stroke="#4ade80" strokeWidth={2} dot={false} />
-          <Line type="monotone" dataKey="pagar" name="A pagar" stroke="#fb7185" strokeWidth={2} dot={false} />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
+  if (!labels.length) return <Chart option={null} />;
+  const option: EChartsOption = {
+    tooltip: { trigger: "axis" },
+    legend: { data: ["Entradas", "Saídas", "Saldo em conta"], bottom: 0, textStyle: { color: COLORS.mist } },
+    grid: { left: 48, right: 16, top: 16, bottom: 40 },
+    xAxis: { type: "category", data: labels, axisLabel: { color: COLORS.mist } },
+    yAxis: moneyAxis,
+    series: [
+      { name: "Entradas", type: "bar", data: entradas, itemStyle: { color: COLORS.receive } },
+      { name: "Saídas", type: "bar", data: saidas, itemStyle: { color: COLORS.pay } },
+      { name: "Saldo em conta", type: "line", data: saldo, itemStyle: { color: "#e67e22" }, symbol: "circle", symbolSize: 7 },
+    ],
+  };
+  return <Chart option={option} height={height} />;
+}
+
+export function DonutChart({
+  data,
+  center,
+  colors,
+}: {
+  data: Array<{ name: string; value: number }>;
+  center?: string;
+  colors?: string[];
+}) {
+  const filtered = data.filter((d) => d.value > 0);
+  if (!filtered.length) return <Chart option={null} />;
+  const option: EChartsOption = {
+    tooltip: { trigger: "item", formatter: (p: unknown) => {
+      const x = p as { name: string; value: number; percent: number };
+      return `${x.name}<br/>${compactMoney(x.value)} (${x.percent}%)`;
+    } },
+    color: colors ?? ["#7ec8e3", "#4ea3d9", "#2b7fb8", "#f0b429", "#e06a6a"],
+    series: [
+      {
+        type: "pie",
+        radius: ["52%", "78%"],
+        label: { show: true, formatter: "{b}\n{d}%", color: COLORS.mist, fontSize: 11 },
+        data: filtered,
+      },
+    ],
+    graphic: center
+      ? [{ type: "text" as const, left: "center", top: "middle", style: { text: center, fill: COLORS.ink, fontSize: 16, fontWeight: 600 } }]
+      : undefined,
+  };
+  return <Chart option={option} height={260} />;
+}
+
+export function HBarChart({ data, color = COLORS.receive }: { data: Array<{ name: string; value: number }>; color?: string }) {
+  const rows = data.filter((d) => d.value !== 0).slice(0, 12).reverse();
+  if (!rows.length) return <Chart option={null} />;
+  const option: EChartsOption = {
+    tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
+    grid: { left: 8, right: 56, top: 8, bottom: 8, containLabel: true },
+    xAxis: { type: "value", axisLabel: { color: COLORS.mist, formatter: (v: number) => compactMoney(v) }, splitLine: { lineStyle: { color: COLORS.grid } } },
+    yAxis: { type: "category", data: rows.map((r) => r.name), axisLabel: { color: COLORS.ink, width: 140, overflow: "truncate" } },
+    series: [
+      {
+        type: "bar",
+        data: rows.map((r) => r.value),
+        itemStyle: { color, borderRadius: [0, 3, 3, 0] },
+        label: {
+          show: true,
+          position: "right",
+          formatter: (p) => compactMoney(Number(p.value ?? 0)),
+          color: COLORS.mist,
+          fontSize: 10,
+        },
+      },
+    ],
+  };
+  return <Chart option={option} height={Math.max(220, rows.length * 28)} />;
+}
+
+export function AreaLine({ labels, series }: { labels: string[]; series: Array<{ name: string; data: number[]; color: string }> }) {
+  if (!labels.length) return <Chart option={null} />;
+  const option: EChartsOption = {
+    tooltip: { trigger: "axis" },
+    grid: { left: 48, right: 16, top: 24, bottom: 28 },
+    xAxis: { type: "category", data: labels, axisLabel: { color: COLORS.mist } },
+    yAxis: moneyAxis,
+    series: series.map((s) => ({
+      name: s.name,
+      type: "line",
+      data: s.data,
+      smooth: true,
+      areaStyle: { opacity: 0.18 },
+      itemStyle: { color: s.color },
+      showSymbol: false,
+    })),
+  };
+  return <Chart option={option} height={180} />;
+}
+
+export function GaugePct({ value, target = 35 }: { value: number; target?: number }) {
+  const option: EChartsOption = {
+    series: [
+      {
+        type: "gauge",
+        startAngle: 200,
+        endAngle: -20,
+        min: 0,
+        max: 100,
+        pointer: { show: true, length: "60%" },
+        axisLine: {
+          lineStyle: {
+            width: 14,
+            color: [
+              [0.45, "#e06a6a"],
+              [0.7, "#e3b341"],
+              [1, "#2f9e6b"],
+            ],
+          },
+        },
+        axisTick: { show: false },
+        splitLine: { show: false },
+        axisLabel: { show: false },
+        detail: { formatter: () => `${value.toFixed(1)}%`, fontSize: 18, offsetCenter: [0, "60%"], color: COLORS.ink },
+        data: [{ value }],
+        title: { show: false },
+      },
+    ],
+    graphic: [{ type: "text", left: "center", top: 18, style: { text: `Meta ${target.toFixed(0)}%`, fill: COLORS.mist, fontSize: 11 } }],
+  };
+  return <Chart option={option} height={180} />;
+}
+
+export function Waterfall({ labels, values }: { labels: string[]; values: number[] }) {
+  if (!labels.length) return <Chart option={null} />;
+  let acc = 0;
+  const helpers = values.map((v, i) => {
+    if (i === 0) {
+      acc = v;
+      return 0;
+    }
+    const base = v >= 0 ? acc : acc + v;
+    acc += v;
+    return Math.max(base, 0);
+  });
+  const option: EChartsOption = {
+    tooltip: { trigger: "axis" },
+    grid: { left: 56, right: 16, top: 24, bottom: 72 },
+    xAxis: { type: "category", data: labels, axisLabel: { color: COLORS.mist, rotate: 30 } },
+    yAxis: moneyAxis,
+    series: [
+      { type: "bar", stack: "w", data: helpers, itemStyle: { color: "transparent" }, silent: true },
+      {
+        type: "bar",
+        stack: "w",
+        data: values.map((v) => ({ value: Math.abs(v), itemStyle: { color: v >= 0 ? COLORS.receive : COLORS.pay } })),
+        label: { show: true, formatter: (p: { dataIndex: number }) => compactMoney(values[p.dataIndex] ?? 0), fontSize: 10 },
+      },
+    ],
+  };
+  return <Chart option={option} height={280} />;
+}
+
+export function Spark({ data, color }: { data: number[]; color: string }) {
+  if (!data.length) return null;
+  const option: EChartsOption = {
+    grid: { left: 0, right: 0, top: 8, bottom: 0 },
+    xAxis: { type: "category", show: false, data: data.map((_, i) => i) },
+    yAxis: { type: "value", show: false },
+    series: [{ type: "line", data, showSymbol: false, areaStyle: { opacity: 0.25 }, itemStyle: { color }, lineStyle: { width: 2 } }],
+  };
+  return <Chart option={option} height={64} />;
 }

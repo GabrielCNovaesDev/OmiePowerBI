@@ -1,58 +1,84 @@
-import { CashflowChart, ProjectionChart } from "@/components/charts";
+import { ComboCashflow } from "@/components/charts";
 import { PageHeader } from "@/components/shell";
-import { DataTable, Kpi } from "@/components/ui";
-import { formatDate, money } from "@/lib/format";
-import { getFluxoMensal, getFluxoPorCategoria, getFluxoProjetado } from "@/lib/queries";
+import { Card, DataTable, Signed, Standby } from "@/components/ui";
+import { money } from "@/lib/format";
+import { getFluxoMensalCaixa } from "@/lib/dash";
+import { readParams } from "@/lib/params";
+import Link from "next/link";
+import { cn } from "@/lib/format";
 
-export default async function FluxoPage() {
-  const [monthly, projetado, categorias] = await Promise.all([
-    getFluxoMensal(12),
-    getFluxoProjetado(),
-    getFluxoPorCategoria(),
-  ]);
-
-  const byDay = new Map<string, { dia: string; receber: number; pagar: number }>();
-  for (const row of projetado) {
-    const key = row.data.slice(0, 10);
-    const current = byDay.get(key) || { dia: formatDate(row.data), receber: 0, pagar: 0 };
-    if (row.natureza === "R") current.receber += Number(row.valor);
-    if (row.natureza === "P") current.pagar += Number(row.valor);
-    byDay.set(key, current);
+export default async function FluxoPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const { period } = await readParams(searchParams);
+  const sp = await searchParams;
+  const modo = Array.isArray(sp.modo) ? sp.modo[0] : sp.modo;
+  if (modo === "previsto" || modo === "ambos") {
+    return (
+      <div>
+        <PageHeader kicker="Dashboards" title="Fluxo de Caixa" />
+        <ModeSwitch current={modo} />
+        <Standby
+          title={modo === "previsto" ? "Fluxo previsto" : "Atual + Previsto"}
+          reason="Os prints documentam o modo Atual com tabela mensal. Previsto e Atual+Previsto ficam em standby."
+        />
+      </div>
+    );
   }
-  const projection = [...byDay.values()].slice(0, 45);
-  const rec30 = projection.reduce((s, d) => s + d.receber, 0);
-  const pag30 = projection.reduce((s, d) => s + d.pagar, 0);
+
+  const months = await getFluxoMensalCaixa(period.from, period.to);
 
   return (
-    <div>
-      <PageHeader
-        kicker="Fluxo de caixa"
-        title="Realizado e projetado"
-        subtitle="Baixas no passado, títulos em aberto no futuro, quebrado por categoria Omie."
-      />
-      <section className="grid gap-4 md:grid-cols-3">
-        <Kpi label="Projetado a entrar (45d)" value={rec30} tone="gain" />
-        <Kpi label="Projetado a sair (45d)" value={pag30} tone="loss" />
-        <Kpi label="Líquido projetado" value={rec30 - pag30} tone={rec30 - pag30 >= 0 ? "gain" : "loss"} />
-      </section>
-
-      <section className="mt-8 rounded-xl border border-line bg-panel p-5">
-        <h2 className="mb-3 font-serif text-xl">Realizado por mês</h2>
-        <CashflowChart data={monthly} />
-      </section>
-
-      <section className="mt-8 rounded-xl border border-line bg-panel p-5">
-        <h2 className="mb-3 font-serif text-xl">Projeção por dia</h2>
-        <ProjectionChart data={projection} />
-      </section>
-
-      <section className="mt-8">
-        <h2 className="mb-3 font-serif text-xl">Aberto por categoria</h2>
-        <DataTable
-          headers={["Categoria", "A receber", "A pagar"]}
-          rows={categorias.map((c) => [`${c.codigo} · ${c.descricao}`, money(c.receber), money(c.pagar)])}
+    <div className="space-y-4">
+      <PageHeader kicker="Dashboards" title="Fluxo de Caixa" subtitle={`${period.label} · realizado de extrato/baixas Omie`} />
+      <ModeSwitch current="atual" />
+      <Card>
+        <p className="mb-2 text-sm font-semibold">Fluxo de Caixa Atual</p>
+        <ComboCashflow
+          labels={months.map((m) => m.label)}
+          entradas={months.map((m) => m.entrada)}
+          saidas={months.map((m) => m.saida)}
+          saldo={months.map((m) => m.saldoAcumulado)}
+          height={360}
         />
-      </section>
+      </Card>
+      <DataTable
+        headers={["", ...months.map((m) => m.label), "Total"]}
+        rows={[
+          ["Saldo inicial", ...months.map((m) => <Signed key={`i${m.mes}`} value={m.saldoInicial} />), ""],
+          ["Transf & Ajustes", ...months.map((m) => <Signed key={`t${m.mes}`} value={m.transf} />), money(months.reduce((s, m) => s + m.transf, 0))],
+          ["Entrada", ...months.map((m) => money(m.entrada)), money(months.reduce((s, m) => s + m.entrada, 0))],
+          ["Saída", ...months.map((m) => money(m.saida)), money(months.reduce((s, m) => s + m.saida, 0))],
+          ["Resultado", ...months.map((m) => <Signed key={`r${m.mes}`} value={m.resultado} />), ""],
+          ["Saldo acumulado", ...months.map((m) => <Signed key={`a${m.mes}`} value={m.saldoAcumulado} />), months.length ? <Signed key="last" value={months[months.length - 1]!.saldoAcumulado} /> : ""],
+        ]}
+      />
+    </div>
+  );
+}
+
+function ModeSwitch({ current }: { current: string }) {
+  const items = [
+    { id: "atual", label: "Atual" },
+    { id: "previsto", label: "Previsto" },
+    { id: "ambos", label: "Atual + Previsto" },
+  ];
+  return (
+    <div className="mb-3 flex flex-wrap gap-2">
+      {items.map((item) => (
+        <Link
+          key={item.id}
+          href={`/fluxo?modo=${item.id}`}
+          className={cn(
+            "rounded border px-4 py-1.5 text-sm",
+            current === item.id ? "border-cyan bg-cyan text-white" : "border-line bg-card hover:border-cyan"
+          )}
+        >
+          {item.label}
+        </Link>
+      ))}
     </div>
   );
 }

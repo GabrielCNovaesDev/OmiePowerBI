@@ -2,37 +2,78 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { cn } from "@/lib/format";
 
-const NAV = [
-  { href: "/", label: "Home", hint: "Caixa do dia" },
-  { href: "/receber", label: "A receber", hint: "Carteira e aging" },
-  { href: "/pagar", label: "A pagar", hint: "Obrigações" },
-  { href: "/fluxo", label: "Fluxo", hint: "Realizado e projetado" },
-  { href: "/extrato", label: "Extrato", hint: "Contas e movimentos" },
-  { href: "/sync", label: "Qualidade", hint: "Sync e conferência" },
+export const DASHBOARDS = [
+  { href: "/", label: "Resumo" },
+  { href: "/saldo", label: "Saldo" },
+  { href: "/fluxo", label: "F. Caixa" },
+  { href: "/resultado", label: "Resultados" },
+  { href: "/dre", label: "DRE" },
+  { href: "/previsto", label: "Prev. x Real." },
+  { href: "/receitas", label: "Receitas" },
+  { href: "/custos", label: "Custos" },
+  { href: "/despesas", label: "Despesas" },
+  { href: "/nfs", label: "NFs" },
+  { href: "/qa", label: "Q&A" },
 ];
 
-export function Nav() {
+export const RELATORIOS = [
+  { href: "/validacao", label: "Validação Omie" },
+  { href: "/check", label: "Check Panel" },
+  { href: "/diario", label: "Relatório Diário" },
+  { href: "/mensal", label: "Relatório Mensal" },
+  { href: "/receber", label: "Contas a receber" },
+  { href: "/pagar", label: "Contas a pagar" },
+  { href: "/extrato", label: "Extrato" },
+  { href: "/sync", label: "Qualidade & Sync" },
+];
+
+export function DashTabs() {
   const pathname = usePathname();
   return (
-    <nav className="flex flex-col gap-1">
-      {NAV.map((item) => {
+    <nav className="flex flex-wrap items-center gap-1">
+      {DASHBOARDS.map((item) => {
         const active = pathname === item.href;
         return (
           <Link
             key={item.href}
             href={item.href}
-            className={
-              active
-                ? "rounded-md bg-panel px-3 py-2 border-l-2 border-gold"
-                : "rounded-md px-3 py-2 border-l-2 border-transparent hover:bg-panel/60"
-            }
+            className={cn(
+              "rounded-full border px-3 py-1 text-xs",
+              active ? "border-cyan bg-cyan text-white" : "border-white/20 text-white/80 hover:bg-white/10"
+            )}
           >
-            <span className="block text-sm text-paper">{item.label}</span>
-            <span className="block text-[11px] text-mist">{item.hint}</span>
+            {item.label}
           </Link>
         );
       })}
     </nav>
+  );
+}
+
+export function ReportNav() {
+  const pathname = usePathname();
+  return (
+    <div>
+      <p className="mb-2 px-1 text-[10px] uppercase tracking-[0.16em] text-white/40">Relatórios</p>
+      <nav className="flex flex-col gap-0.5">
+        {RELATORIOS.map((item) => {
+          const active = pathname === item.href;
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={cn(
+                "rounded px-2 py-1.5 text-sm",
+                active ? "bg-white/10 text-cyan" : "text-white/80 hover:bg-white/5"
+              )}
+            >
+              {item.label}
+            </Link>
+          );
+        })}
+      </nav>
+    </div>
   );
 }
