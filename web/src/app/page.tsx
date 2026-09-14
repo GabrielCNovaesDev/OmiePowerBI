@@ -42,7 +42,7 @@ export default async function ResumoPage({
     getFluxoDiarioMes(monthStart, today, filter),
   ]);
   const previsto = saldo.saldo + kpis.receberHoje - kpis.pagarHoje;
-  const dateLabel = new Date(`${today}T00:00:00`).toLocaleDateString("pt-BR", {
+  const dateLabel = new Date(`${today}T12:00:00-03:00`).toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "long",
     year: "numeric",
