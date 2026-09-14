@@ -26,6 +26,7 @@ export const RELATORIOS = [
   { href: "/mensal", label: "Relatório Mensal" },
   { href: "/receber", label: "Contas a receber" },
   { href: "/pagar", label: "Contas a pagar" },
+  { href: "/titulos", label: "Lançamentos" },
   { href: "/extrato", label: "Extrato" },
   { href: "/sync", label: "Qualidade & Sync" },
 ];

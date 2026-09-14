@@ -145,31 +145,12 @@ export type TituloRow = {
   codigo_categoria: string | null;
   descricao_categoria: string | null;
   origem: string | null;
+  nf: string | null;
+  conta: string | null;
 };
 
-export async function getTitulos(natureza: "R" | "P", limit = 80, filter?: DimFilter): Promise<TituloRow[]> {
-  const b = new Binder();
-  const nat = b.add(natureza);
-  const lim = b.add(limit);
-  const rows = await query<Record<string, unknown>>(
-    `SELECT t.codigo_titulo_omie::text, t.numero_titulo, c.razao_social, t.status::text,
-            t.data_vencimento::text, t.data_emissao::text,
-            t.valor_titulo::float, t.valor_aberto::float, t.valor_pago::float,
-            t.codigo_categoria, cat.descricao AS descricao_categoria, t.codigo_origem AS origem
-     FROM fato.titulo t
-     LEFT JOIN dim.cliente c ON c.app_key=t.app_key AND c.codigo_cliente_omie=t.codigo_cliente_omie
-     LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria
-     WHERE t.natureza=${nat}
-       ${dimSql(b, filter, { cliente: "t.codigo_cliente_omie", categoria: "t.codigo_categoria", conta: "t.codigo_cc_omie", departamento: "t.codigo_departamento" })}
-     ORDER BY
-       CASE WHEN t.status IN ('ATRASADO') THEN 0
-            WHEN t.status IN ('VENCEHOJE','AVENCER','EMABERTO','PAGTO_PARCIAL') THEN 1
-            ELSE 2 END,
-       t.data_vencimento ASC NULLS LAST
-     LIMIT ${lim}`,
-    b.values
-  );
-  return rows.map((r) => ({
+function mapTitulo(r: Record<string, unknown>): TituloRow {
+  return {
     codigo_titulo_omie: String(r.codigo_titulo_omie),
     numero_titulo: r.numero_titulo ? String(r.numero_titulo) : null,
     razao_social: r.razao_social ? String(r.razao_social) : null,
@@ -182,7 +163,101 @@ export async function getTitulos(natureza: "R" | "P", limit = 80, filter?: DimFi
     codigo_categoria: r.codigo_categoria ? String(r.codigo_categoria) : null,
     descricao_categoria: r.descricao_categoria ? String(r.descricao_categoria) : null,
     origem: r.origem ? String(r.origem) : null,
-  }));
+    nf: r.nf ? String(r.nf) : null,
+    conta: r.conta ? String(r.conta) : null,
+  };
+}
+
+const TITULO_SELECT = `SELECT t.codigo_titulo_omie::text, t.numero_titulo, c.razao_social, t.status::text,
+            t.data_vencimento::text, t.data_emissao::text,
+            t.valor_titulo::float, t.valor_aberto::float, t.valor_pago::float,
+            t.codigo_categoria, cat.descricao AS descricao_categoria, t.codigo_origem AS origem,
+            t.numero_documento_fiscal AS nf, cc.descricao AS conta
+     FROM fato.titulo t
+     LEFT JOIN dim.cliente c ON c.app_key=t.app_key AND c.codigo_cliente_omie=t.codigo_cliente_omie
+     LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria
+     LEFT JOIN dim.conta_corrente cc ON cc.app_key=t.app_key AND cc.codigo_cc_omie=t.codigo_cc_omie`;
+
+export async function getTitulos(natureza: "R" | "P", limit = 80, filter?: DimFilter): Promise<TituloRow[]> {
+  const b = new Binder();
+  const nat = b.add(natureza);
+  const lim = b.add(limit);
+  const rows = await query<Record<string, unknown>>(
+    `${TITULO_SELECT}
+     WHERE t.natureza=${nat}
+       ${dimSql(b, filter, { cliente: "t.codigo_cliente_omie", categoria: "t.codigo_categoria", conta: "t.codigo_cc_omie", departamento: "t.codigo_departamento" })}
+     ORDER BY
+       CASE WHEN t.status IN ('ATRASADO') THEN 0
+            WHEN t.status IN ('VENCEHOJE','AVENCER','EMABERTO','PAGTO_PARCIAL') THEN 1
+            ELSE 2 END,
+       t.data_vencimento ASC NULLS LAST
+     LIMIT ${lim}`,
+    b.values
+  );
+  return rows.map(mapTitulo);
+}
+
+export type TituloRecorte = "hoje" | "atraso" | "vencer" | "aberto";
+
+function recorteClause(recorte?: string): string {
+  if (recorte === "hoje") {
+    return `AND t.data_vencimento = CURRENT_DATE AND t.valor_aberto > 0 AND t.status::text NOT IN ('CANCELADO','PAGO','RECEBIDO','LIQUIDADO')`;
+  }
+  if (recorte === "atraso") {
+    return `AND t.status = 'ATRASADO' AND t.valor_aberto > 0`;
+  }
+  if (recorte === "vencer") {
+    return `AND t.data_vencimento >= CURRENT_DATE AND t.valor_aberto > 0 AND t.status::text NOT IN ('CANCELADO','PAGO','RECEBIDO','LIQUIDADO')`;
+  }
+  if (recorte === "aberto") {
+    return `AND t.valor_aberto > 0 AND t.status::text NOT IN ('CANCELADO','PAGO','RECEBIDO','LIQUIDADO')`;
+  }
+  return "";
+}
+
+export async function getTitulosDrill(opts: {
+  natureza?: "R" | "P";
+  recorte?: TituloRecorte;
+  status?: string;
+  filter?: DimFilter;
+  limit?: number;
+}): Promise<{ rows: TituloRow[]; total: number; valorAberto: number }> {
+  const b = new Binder();
+  const parts = ["1=1"];
+  if (opts.natureza) parts.push(`AND t.natureza=${b.add(opts.natureza)}`);
+  const recorteSql = recorteClause(opts.recorte);
+  if (recorteSql) parts.push(recorteSql);
+  if (opts.status) parts.push(`AND t.status::text = ${b.add(opts.status)}`);
+  const dims = dimSql(b, opts.filter, {
+    cliente: "t.codigo_cliente_omie",
+    categoria: "t.codigo_categoria",
+    conta: "t.codigo_cc_omie",
+    departamento: "t.codigo_departamento",
+  });
+  if (dims) parts.push(dims);
+  const where = parts.filter(Boolean).join(" ");
+  const lim = b.add(opts.limit ?? 200);
+  const [rows, agg] = await Promise.all([
+    query<Record<string, unknown>>(
+      `${TITULO_SELECT}
+       WHERE ${where}
+       ORDER BY
+         CASE WHEN t.status IN ('ATRASADO') THEN 0
+              WHEN t.status IN ('VENCEHOJE','AVENCER','EMABERTO','PAGTO_PARCIAL') THEN 1
+              ELSE 2 END,
+         t.data_vencimento ASC NULLS LAST
+       LIMIT ${lim}`,
+      b.values
+    ),
+    query<Record<string, unknown>>(
+      `SELECT COUNT(*)::int AS total, COALESCE(SUM(t.valor_aberto),0)::float AS valor
+       FROM fato.titulo t
+       WHERE ${where}`,
+      b.values.slice(0, b.values.length - 1)
+    ),
+  ]);
+  const a = agg[0] ?? {};
+  return { rows: rows.map(mapTitulo), total: n(a.total), valorAberto: n(a.valor) };
 }
 
 export async function getFluxoMensal(months = 12) {

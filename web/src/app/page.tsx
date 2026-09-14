@@ -71,12 +71,12 @@ export default async function ResumoPage({
 
       <div className="overflow-hidden rounded-md bg-receive text-white">
         <div className="grid gap-4 p-4 md:grid-cols-[240px_1fr]">
-          <div>
+          <Link href={hrefWith(raw, "/titulos", { nat: "R", recorte: "hoje" })} className="block hover:opacity-90">
             <p className="text-xs uppercase tracking-wide text-white/80">Receber hoje</p>
-            <p className="text-[11px] text-white/70">Considerando a data de vencimento</p>
+            <p className="text-[11px] text-white/70">Considerando a data de vencimento · clique para detalhar</p>
             <p className="mt-3 text-3xl font-semibold">{compactMoney(kpis.receberHoje)}</p>
             <p className="text-sm text-white/80">{kpis.qtdReceber} contas</p>
-          </div>
+          </Link>
           <DataTable
             headers={["Categoria / Cliente / NF", "Vencimento", "Qtd", "Valor"]}
             rows={receber.map((r) => [
@@ -91,12 +91,12 @@ export default async function ResumoPage({
 
       <div className="overflow-hidden rounded-md bg-pay text-white">
         <div className="grid gap-4 p-4 md:grid-cols-[240px_1fr]">
-          <div>
+          <Link href={hrefWith(raw, "/titulos", { nat: "P", recorte: "hoje" })} className="block hover:opacity-90">
             <p className="text-xs uppercase tracking-wide text-white/80">Pagar hoje</p>
-            <p className="text-[11px] text-white/70">Considerando a data de vencimento</p>
+            <p className="text-[11px] text-white/70">Considerando a data de vencimento · clique para detalhar</p>
             <p className="mt-3 text-3xl font-semibold">{compactMoney(kpis.pagarHoje)}</p>
             <p className="text-sm text-white/80">{kpis.qtdPagar} contas</p>
-          </div>
+          </Link>
           <DataTable
             headers={["Categoria / Fornecedor / NF", "Vencimento", "Qtd", "Valor"]}
             rows={pagar.map((r) => [
@@ -110,8 +110,20 @@ export default async function ResumoPage({
       </div>
 
       <div className="grid gap-3 md:grid-cols-3">
-        <ToneCard label="Receber hoje" value={kpis.receberHoje} hint={`Atraso ${money(kpis.receberAtraso)}`} tone="receive" />
-        <ToneCard label="Pagar hoje" value={kpis.pagarHoje} hint={`Atraso ${money(kpis.pagarAtraso)}`} tone="pay" />
+        <ToneCard
+          label="Receber hoje"
+          value={kpis.receberHoje}
+          hint={`Atraso ${money(kpis.receberAtraso)} · clique para detalhar`}
+          tone="receive"
+          href={hrefWith(raw, "/titulos", { nat: "R", recorte: "hoje" })}
+        />
+        <ToneCard
+          label="Pagar hoje"
+          value={kpis.pagarHoje}
+          hint={`Atraso ${money(kpis.pagarAtraso)} · clique para detalhar`}
+          tone="pay"
+          href={hrefWith(raw, "/titulos", { nat: "P", recorte: "hoje" })}
+        />
         <Card>
           <p className="text-[11px] uppercase tracking-wide text-mist">Saldo previsto hoje</p>
           <p className="mt-1 text-2xl font-semibold">

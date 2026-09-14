@@ -1,17 +1,18 @@
+import Link from "next/link";
 import { DonutChart, HBarChart } from "@/components/charts";
 import { PageHeader } from "@/components/shell";
 import { Card, DataTable, Kpi, StatusPill } from "@/components/ui";
 import { compactMoney, formatDate, money } from "@/lib/format";
 import { getAgingBi, getAgingByDim } from "@/lib/dash";
 import { getStatusBreakdown, getTitulos } from "@/lib/queries";
-import { readParams } from "@/lib/params";
+import { hrefWith, readParams } from "@/lib/params";
 
 export default async function PagarPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { filter } = await readParams(searchParams);
+  const { filter, raw } = await readParams(searchParams);
   const [atrasado, aVencer, catAtraso, fornAtraso, catVencer, fornVencer, titulos, status] = await Promise.all([
     getAgingBi("P", true, filter),
     getAgingBi("P", false, filter),
@@ -29,8 +30,8 @@ export default async function PagarPage({
     <div className="space-y-6">
       <PageHeader kicker="Obrigações" title="Contas a pagar" subtitle="Gastos atrasados e a vencer, no layout do Business Indicator." />
       <section className="grid gap-4 md:grid-cols-2">
-        <Kpi label="Gastos atrasados" value={totAtraso} tone="loss" />
-        <Kpi label="Gastos a vencer" value={totVencer} tone="pay" />
+        <Kpi label="Gastos atrasados" value={totAtraso} tone="loss" href={hrefWith(raw, "/titulos", { nat: "P", recorte: "atraso" })} />
+        <Kpi label="Gastos a vencer" value={totVencer} tone="pay" href={hrefWith(raw, "/titulos", { nat: "P", recorte: "vencer" })} />
       </section>
       <AgingBlock title="4.1 Gastos atrasados" total={totAtraso} aging={atrasado} categorias={catAtraso} pessoas={fornAtraso} color="#e07a3a" />
       <AgingBlock title="4.2 Gastos a vencer" total={totVencer} aging={aVencer} categorias={catVencer} pessoas={fornVencer} color="#e06a6a" />
@@ -38,11 +39,22 @@ export default async function PagarPage({
         <p className="mb-3 text-sm font-semibold">Por status</p>
         <DataTable
           headers={["Status", "Qtd", "Valor aberto"]}
-          rows={status.map((s) => [<StatusPill key={s.status} status={s.status} />, String(s.qtd), money(s.valor)])}
+          rows={status.map((s) => [
+            <Link key={s.status} href={hrefWith(raw, "/titulos", { nat: "P", recorte: "todos", status: s.status })} className="hover:underline">
+              <StatusPill status={s.status} />
+            </Link>,
+            String(s.qtd),
+            money(s.valor),
+          ])}
         />
       </Card>
       <Card padded={false}>
-        <p className="px-4 py-3 text-sm font-semibold">Títulos</p>
+        <p className="px-4 py-3 text-sm font-semibold">
+          Títulos{" "}
+          <Link href={hrefWith(raw, "/titulos", { nat: "P", recorte: "aberto" })} className="ml-2 text-xs font-normal text-cyan hover:underline">
+            ver lançamentos
+          </Link>
+        </p>
         <DataTable
           headers={["Vencimento", "Fornecedor", "Documento", "Categoria", "Status", "Valor", "Aberto"]}
           rows={titulos.map((t) => [

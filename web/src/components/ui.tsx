@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { cn, compactMoney, money } from "@/lib/format";
 
 export function Card({
@@ -31,12 +32,14 @@ export function Kpi({
   hint,
   tone = "neutral",
   compact = false,
+  href,
 }: {
   label: string;
   value: string | number;
   hint?: string;
   tone?: "neutral" | "gain" | "loss" | "receive" | "pay" | "cyan";
   compact?: boolean;
+  href?: string;
 }) {
   const color =
     tone === "gain"
@@ -50,14 +53,22 @@ export function Kpi({
             : tone === "cyan"
               ? "text-cyan-2"
               : "text-ink";
-  return (
-    <div className="rounded-md border border-line bg-card px-4 py-3">
+  const body = (
+    <>
       <p className="text-[11px] uppercase tracking-[0.14em] text-mist">{label}</p>
       <p className={cn("mt-1 font-semibold tracking-tight", compact ? "text-xl" : "text-2xl", color)}>
         {typeof value === "number" ? money(value) : value}
       </p>
       {hint ? <p className="mt-1 text-xs text-mist">{hint}</p> : null}
-    </div>
+    </>
+  );
+  const className = cn("rounded-md border border-line bg-card px-4 py-3", href && "block transition hover:border-cyan");
+  return href ? (
+    <Link href={href} className={className}>
+      {body}
+    </Link>
+  ) : (
+    <div className={className}>{body}</div>
   );
 }
 
@@ -66,20 +77,30 @@ export function ToneCard({
   value,
   hint,
   tone,
+  href,
 }: {
   label: string;
   value: number;
   hint?: string;
   tone: "receive" | "pay" | "gain" | "loss";
+  href?: string;
 }) {
   const bg =
     tone === "receive" ? "bg-receive text-white" : tone === "pay" || tone === "loss" ? "bg-pay text-white" : "bg-gain text-white";
-  return (
-    <div className={cn("rounded-md px-4 py-3 shadow-sm", bg)}>
+  const className = cn("rounded-md px-4 py-3 shadow-sm", bg, href && "block transition hover:opacity-90");
+  const body = (
+    <>
       <p className="text-[11px] uppercase tracking-wide text-white/80">{label}</p>
       <p className="mt-1 text-2xl font-semibold">{compactMoney(value)}</p>
       {hint ? <p className="mt-1 text-xs text-white/80">{hint}</p> : null}
-    </div>
+    </>
+  );
+  return href ? (
+    <Link href={href} className={className}>
+      {body}
+    </Link>
+  ) : (
+    <div className={className}>{body}</div>
   );
 }
 

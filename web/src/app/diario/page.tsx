@@ -47,8 +47,8 @@ export default async function DiarioPage({
       <div className="rounded bg-cyan px-4 py-2 text-sm font-semibold text-white">Fluxo de Caixa</div>
       <div className="grid gap-3 md:grid-cols-5">
         <ToneCard label="Saldo inicial (hoje)" value={saldo.saldo} tone={saldo.saldo >= 0 ? "gain" : "loss"} />
-        <ToneCard label="Receber (hoje)" value={kpis.receberHoje} hint={`Atrasado ${money(kpis.receberAtraso)}`} tone="receive" />
-        <ToneCard label="Pagar (hoje)" value={kpis.pagarHoje} hint={`Atrasado ${money(kpis.pagarAtraso)}`} tone="pay" />
+        <ToneCard label="Receber (hoje)" value={kpis.receberHoje} hint={`Atrasado ${money(kpis.receberAtraso)}`} tone="receive" href={hrefWith(raw, "/titulos", { nat: "R", recorte: "hoje" })} />
+        <ToneCard label="Pagar (hoje)" value={kpis.pagarHoje} hint={`Atrasado ${money(kpis.pagarAtraso)}`} tone="pay" href={hrefWith(raw, "/titulos", { nat: "P", recorte: "hoje" })} />
         <ToneCard label="Resultado (receber − pagar)" value={resultado} tone={resultado >= 0 ? "gain" : "loss"} />
         <ToneCard label="Saldo previsto (hoje)" value={previsto} tone={previsto >= 0 ? "gain" : "loss"} hint={`Atrasados ${money(kpis.receberAtraso - kpis.pagarAtraso)}`} />
       </div>
