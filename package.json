@@ -13,7 +13,12 @@
     "doc": "docs"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "probe": "node scripts/probe-omie.js",
+    "load": "node scripts/load-full.js",
+    "deploy:schema": "node db/deploy.js",
+    "dev": "npm --prefix web run dev",
+    "build": "npm --prefix web run build"
   },
   "repository": {
     "type": "git",

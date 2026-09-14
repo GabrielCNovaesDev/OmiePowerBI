@@ -3,3 +3,7 @@
 *.pem
 .neon
 node_modules/
+fixtures/omie/
+web/.next/
+web/node_modules/
+web/.env.local

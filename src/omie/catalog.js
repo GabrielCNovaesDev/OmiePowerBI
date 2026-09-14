@@ -1,0 +1,100 @@
+"use strict";
+
+const CATALOG = {
+  empresas: {
+    url: "https://app.omie.com.br/api/v1/geral/empresas/",
+    call: "ListarEmpresas",
+    style: "pagina",
+    recordsKey: "empresas_cadastro",
+    mvp: true,
+  },
+  bancos: {
+    url: "https://app.omie.com.br/api/v1/geral/bancos/",
+    call: "ListarBancos",
+    style: "pagina",
+    recordsKey: "fin_banco_resposta",
+    mvp: true,
+  },
+  contasCorrentes: {
+    url: "https://app.omie.com.br/api/v1/geral/contacorrente/",
+    call: "ListarContasCorrentes",
+    style: "pagina",
+    recordsKey: "ListarContasCorrentes",
+    mvp: true,
+  },
+  dre: {
+    url: "https://app.omie.com.br/api/v1/geral/dre/",
+    call: "ListarCadastroDRE",
+    style: "none",
+    recordsKey: "cadastros",
+    mvp: true,
+    extraParam: { apenasContasAtivas: "N" },
+  },
+  categorias: {
+    url: "https://app.omie.com.br/api/v1/geral/categorias/",
+    call: "ListarCategorias",
+    style: "pagina",
+    recordsKey: "categoria_cadastro",
+    mvp: true,
+  },
+  departamentos: {
+    url: "https://app.omie.com.br/api/v1/geral/departamentos/",
+    call: "ListarDepartamentos",
+    style: "pagina",
+    recordsKey: "departamentos",
+    mvp: true,
+  },
+  origens: {
+    url: "https://app.omie.com.br/api/v1/geral/origemlancamento/",
+    call: "ListarOrigem",
+    style: "none",
+    recordsKey: "origem",
+    mvp: true,
+    extraParam: { codigo: "" },
+  },
+  parcelas: {
+    url: "https://app.omie.com.br/api/v1/geral/parcelas/",
+    call: "ListarParcelas",
+    style: "pagina",
+    recordsKey: "cadastros",
+    mvp: true,
+  },
+  clientes: {
+    url: "https://app.omie.com.br/api/v1/geral/clientes/",
+    call: "ListarClientes",
+    style: "pagina",
+    recordsKey: "clientes_cadastro",
+    mvp: true,
+  },
+  titulos: {
+    url: "https://app.omie.com.br/api/v1/financas/pesquisartitulos/",
+    call: "PesquisarLancamentos",
+    style: "nPagina",
+    recordsKey: "titulosEncontrados",
+    mvp: true,
+    extraParam: { lDadosCad: true },
+  },
+  extrato: {
+    url: "https://app.omie.com.br/api/v1/financas/extrato/",
+    call: "ListarExtrato",
+    style: "none",
+    recordsKey: "listaMovimentos",
+    mvp: true,
+  },
+  orcamentos: {
+    url: "https://app.omie.com.br/api/v1/financas/caixa/",
+    call: "ListarOrcamentos",
+    style: "none",
+    recordsKey: "ListaOrcamentos",
+    mvp: true,
+  },
+  resumo: {
+    url: "https://app.omie.com.br/api/v1/financas/resumo/",
+    call: "ObterResumoFinancas",
+    style: "none",
+    recordsKey: null,
+    mvp: true,
+  },
+};
+
+module.exports = { CATALOG };

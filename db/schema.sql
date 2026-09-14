@@ -668,7 +668,7 @@ CREATE TABLE ops.reconciliacao (
     valor_omie              NUMERIC(15,2)     NOT NULL,  -- vem do resumo
     valor_bi                NUMERIC(15,2)     NOT NULL,  -- calculado dos fatos
     diferenca               NUMERIC(15,2)     GENERATED ALWAYS AS (valor_omie - valor_bi) STORED,
-    diferenca_percentual    NUMERIC(7,4)      GENERATED ALWAYS AS (
+    diferenca_percentual    NUMERIC(12,4)     GENERATED ALWAYS AS (
         CASE WHEN valor_omie <> 0
              THEN ((valor_omie - valor_bi) / valor_omie) * 100
              ELSE 0
