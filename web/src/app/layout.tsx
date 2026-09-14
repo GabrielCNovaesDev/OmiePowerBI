@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { Shell } from "@/components/shell";
 import { formatDateTime } from "@/lib/format";
 import { getEmpresa } from "@/lib/queries";
+import { getFilterOptions } from "@/lib/dash";
 import { query } from "@/lib/db";
 import "./globals.css";
 
@@ -22,6 +23,7 @@ export const dynamic = "force-dynamic";
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   let company: string | null = null;
   let lastSync: string | null = null;
+  let filterOptions = null;
   try {
     const empresa = await getEmpresa();
     company = empresa?.nome_fantasia || empresa?.razao_social || null;
@@ -32,15 +34,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     const last = rows[0];
     if (last?.status === "running") lastSync = `Carga em andamento (${last.metodo})`;
     else if (last?.ts) lastSync = formatDateTime(last.ts);
+    filterOptions = await getFilterOptions();
   } catch {
-    company = "Banco ainda não conectado";
+    company = company || "Banco ainda não conectado";
   }
 
   return (
     <html lang="pt-BR">
       <body className={`${geist.variable} font-sans antialiased`}>
         <Suspense fallback={null}>
-          <Shell company={company} lastSync={lastSync}>
+          <Shell company={company} lastSync={lastSync} filterOptions={filterOptions}>
             {children}
           </Shell>
         </Suspense>

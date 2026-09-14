@@ -18,26 +18,26 @@ export default async function MensalPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { period } = await readParams(searchParams);
+  const { period, filter } = await readParams(searchParams);
   const [kpi, monthly, fluxo, recCat, inad, recAtrasoCat, recAtrasoCli, recVencerCat, recVencerCli, pagAtrasoCat, pagAtrasoCli, pagVencerCat, pagVencerCli, atrasadoR, vencerR, atrasadoP, vencerP] =
     await Promise.all([
-      getResultado(period.from, period.to),
-      getResultadoMensal(period.from, period.to),
-      getFluxoMensalCaixa(period.from, period.to),
-      getEntradasSaidas(period.from, period.to),
-      getInadimplenciaMensal(),
-      getAgingByDim("R", true, "categoria"),
-      getAgingByDim("R", true, "cliente"),
-      getAgingByDim("R", false, "categoria"),
-      getAgingByDim("R", false, "cliente"),
-      getAgingByDim("P", true, "categoria"),
-      getAgingByDim("P", true, "cliente"),
-      getAgingByDim("P", false, "categoria"),
-      getAgingByDim("P", false, "cliente"),
-      getAgingBi("R", true),
-      getAgingBi("R", false),
-      getAgingBi("P", true),
-      getAgingBi("P", false),
+      getResultado(period.from, period.to, filter),
+      getResultadoMensal(period.from, period.to, filter),
+      getFluxoMensalCaixa(period.from, period.to, filter),
+      getEntradasSaidas(period.from, period.to, filter),
+      getInadimplenciaMensal(filter),
+      getAgingByDim("R", true, "categoria", filter),
+      getAgingByDim("R", true, "cliente", filter),
+      getAgingByDim("R", false, "categoria", filter),
+      getAgingByDim("R", false, "cliente", filter),
+      getAgingByDim("P", true, "categoria", filter),
+      getAgingByDim("P", true, "cliente", filter),
+      getAgingByDim("P", false, "categoria", filter),
+      getAgingByDim("P", false, "cliente", filter),
+      getAgingBi("R", true, filter),
+      getAgingBi("R", false, filter),
+      getAgingBi("P", true, filter),
+      getAgingBi("P", false, filter),
     ]);
 
   const spark = (key: "receita" | "resultado") => monthly.map((m) => (key === "receita" ? m.receita : m.resultado));

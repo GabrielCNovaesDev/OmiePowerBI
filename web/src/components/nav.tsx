@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/format";
+import { globalQuery } from "@/lib/params";
 
 export const DASHBOARDS = [
   { href: "/", label: "Resumo" },
@@ -29,8 +30,14 @@ export const RELATORIOS = [
   { href: "/sync", label: "Qualidade & Sync" },
 ];
 
+function hrefKeepFilters(path: string, search: URLSearchParams) {
+  const q = globalQuery(search);
+  return q ? `${path}?${q}` : path;
+}
+
 export function DashTabs() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   return (
     <nav className="flex flex-wrap items-center gap-1">
       {DASHBOARDS.map((item) => {
@@ -38,7 +45,7 @@ export function DashTabs() {
         return (
           <Link
             key={item.href}
-            href={item.href}
+            href={hrefKeepFilters(item.href, searchParams)}
             className={cn(
               "rounded-full border px-3 py-1 text-xs",
               active ? "border-cyan bg-cyan text-white" : "border-white/20 text-white/80 hover:bg-white/10"
@@ -54,6 +61,7 @@ export function DashTabs() {
 
 export function ReportNav() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   return (
     <div>
       <p className="mb-2 px-1 text-[10px] uppercase tracking-[0.16em] text-white/40">Relatórios</p>
@@ -63,7 +71,7 @@ export function ReportNav() {
           return (
             <Link
               key={item.href}
-              href={item.href}
+              href={hrefKeepFilters(item.href, searchParams)}
               className={cn(
                 "rounded px-2 py-1.5 text-sm",
                 active ? "bg-white/10 text-cyan" : "text-white/80 hover:bg-white/5"

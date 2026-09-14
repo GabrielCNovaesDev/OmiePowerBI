@@ -3,6 +3,14 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { PERIODO_OPTIONS } from "@/lib/period";
 
+export type FilterOption = { codigo: string; descricao: string };
+export type FilterOptions = {
+  categorias: FilterOption[];
+  contas: FilterOption[];
+  clientes: FilterOption[];
+  departamentos: FilterOption[];
+};
+
 function Select({
   label,
   name,
@@ -22,14 +30,15 @@ function Select({
     const sp = new URLSearchParams(params.toString());
     if (!next || next === "todos") sp.delete(name);
     else sp.set(name, next);
-    router.push(`${pathname}?${sp.toString()}`);
+    const q = sp.toString();
+    router.push(q ? `${pathname}?${q}` : pathname);
   }
 
   return (
     <label className="block text-[11px] text-white/70">
       {label}
       <select
-        className="mt-1 w-full rounded border border-white/15 bg-header px-2 py-1.5 text-sm text-white"
+        className="mt-1 w-full max-w-full rounded border border-white/15 bg-header px-2 py-1.5 text-sm text-white"
         value={value}
         onChange={(e) => onChange(e.target.value)}
       >
@@ -43,10 +52,32 @@ function Select({
   );
 }
 
-export function FilterRail() {
+function withTodos(rows: FilterOption[]): Array<{ value: string; label: string }> {
+  return [{ value: "todos", label: "Todos" }, ...rows.map((r) => ({ value: r.codigo, label: r.descricao }))];
+}
+
+export function FilterRail({ options }: { options?: FilterOptions | null }) {
   const params = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const periodo = params.get("periodo") ?? "ano_corrente";
   const base = params.get("base") ?? "caixa";
+  const cliente = params.get("cliente") ?? "todos";
+  const categoria = params.get("categoria") ?? "todos";
+  const conta = params.get("conta") ?? "todos";
+  const departamento = params.get("departamento") ?? "todos";
+  const hasDim =
+    params.has("cliente") || params.has("categoria") || params.has("conta") || params.has("departamento");
+
+  function clearDims() {
+    const sp = new URLSearchParams(params.toString());
+    sp.delete("cliente");
+    sp.delete("categoria");
+    sp.delete("conta");
+    sp.delete("departamento");
+    const q = sp.toString();
+    router.push(q ? `${pathname}?${q}` : pathname);
+  }
 
   return (
     <div className="space-y-3">
@@ -61,9 +92,20 @@ export function FilterRail() {
           { value: "comp", label: "Competência" },
         ]}
       />
-      <p className="px-1 text-[11px] leading-relaxed text-white/40">
-        Cliente, categoria, conta e departamento entram na próxima iteração. O recorte de período já altera todas as telas.
-      </p>
+      <Select label="Cliente / Fornecedor" name="cliente" value={cliente} options={withTodos(options?.clientes ?? [])} />
+      <Select label="Categoria" name="categoria" value={categoria} options={withTodos(options?.categorias ?? [])} />
+      <Select label="Conta corrente" name="conta" value={conta} options={withTodos(options?.contas ?? [])} />
+      <Select
+        label="Departamento"
+        name="departamento"
+        value={departamento}
+        options={withTodos(options?.departamentos ?? [])}
+      />
+      {hasDim ? (
+        <button type="button" onClick={clearDims} className="text-[11px] text-cyan hover:underline">
+          Limpar dimensões
+        </button>
+      ) : null}
     </div>
   );
 }

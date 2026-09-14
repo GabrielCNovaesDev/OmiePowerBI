@@ -10,8 +10,8 @@ export default async function QaPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { period } = await readParams(searchParams);
-  const qa = await getQaClientes(period.from, period.to);
+  const { period, filter } = await readParams(searchParams);
+  const qa = await getQaClientes(period.from, period.to, filter);
 
   return (
     <div className="space-y-4">

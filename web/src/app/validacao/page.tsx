@@ -2,7 +2,7 @@ import { ComboCashflow } from "@/components/charts";
 import { PageHeader } from "@/components/shell";
 import { Card } from "@/components/ui";
 import { getFluxoMensalCaixa } from "@/lib/dash";
-import { readParams } from "@/lib/params";
+import { hrefWith, readParams } from "@/lib/params";
 import Link from "next/link";
 import { cn } from "@/lib/format";
 
@@ -11,10 +11,9 @@ export default async function ValidacaoPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { period } = await readParams(searchParams);
-  const sp = await searchParams;
-  const tipo = (Array.isArray(sp.tipo) ? sp.tipo[0] : sp.tipo) || "fluxo";
-  const months = await getFluxoMensalCaixa(period.from, period.to);
+  const { period, filter, raw } = await readParams(searchParams);
+  const tipo = (Array.isArray(raw.tipo) ? raw.tipo[0] : raw.tipo) || "fluxo";
+  const months = await getFluxoMensalCaixa(period.from, period.to, filter);
 
   return (
     <div className="space-y-5">
@@ -24,10 +23,10 @@ export default async function ValidacaoPage({
         subtitle="Conferir os totais do ERP com o que o BI calculou a partir da API. Os valores são da sua empresa, não dos prints."
       />
       <div className="flex gap-2">
-        <Link href="/validacao?tipo=fluxo" className={cn("rounded px-5 py-2 text-sm font-semibold", tipo === "fluxo" ? "bg-cyan text-white" : "bg-paper")}>
+        <Link href={hrefWith(raw, "/validacao", { tipo: "fluxo" })} className={cn("rounded px-5 py-2 text-sm font-semibold", tipo === "fluxo" ? "bg-cyan text-white" : "bg-paper")}>
           Fluxo de Caixa
         </Link>
-        <Link href="/validacao?tipo=dre" className={cn("rounded px-5 py-2 text-sm font-semibold", tipo === "dre" ? "bg-cyan text-white" : "bg-paper")}>
+        <Link href={hrefWith(raw, "/validacao", { tipo: "dre" })} className={cn("rounded px-5 py-2 text-sm font-semibold", tipo === "dre" ? "bg-cyan text-white" : "bg-paper")}>
           DRE
         </Link>
       </div>

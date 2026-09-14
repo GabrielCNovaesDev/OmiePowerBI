@@ -1,14 +1,16 @@
 import { DashTabs, ReportNav } from "./nav";
-import { FilterRail } from "./filters";
+import { FilterRail, type FilterOptions } from "./filters";
 
 export function Shell({
   children,
   company,
   lastSync,
+  filterOptions,
 }: {
   children: React.ReactNode;
   company?: string | null;
   lastSync?: string | null;
+  filterOptions?: FilterOptions | null;
 }) {
   return (
     <div className="min-h-screen bg-bg">
@@ -29,7 +31,7 @@ export function Shell({
         <aside className="bg-header px-4 py-5 lg:min-h-[calc(100vh-64px)]">
           <ReportNav />
           <div className="mt-8">
-            <FilterRail />
+            <FilterRail options={filterOptions} />
           </div>
         </aside>
         <main className="min-w-0 px-4 py-5 md:px-6">{children}</main>

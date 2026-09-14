@@ -3,7 +3,7 @@ import { Card, DataTable, Dot, Standby } from "@/components/ui";
 import { money } from "@/lib/format";
 import { getBlankDocs, getCheckPanel, getSaldoAtual, getSaldoPorConta } from "@/lib/dash";
 import { getResumo } from "@/lib/queries";
-import { readParams } from "@/lib/params";
+import { hrefWith, readParams, type DimFilter } from "@/lib/params";
 import { cn } from "@/lib/format";
 import Link from "next/link";
 
@@ -22,11 +22,10 @@ export default async function CheckPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { period } = await readParams(searchParams);
-  const sp = await searchParams;
-  const tab = (Array.isArray(sp.tab) ? sp.tab[0] : sp.tab) || "status";
-  const blank = (Array.isArray(sp.blank) ? sp.blank[0] : sp.blank) || "projetos";
-  const items = await getCheckPanel(period.from, period.to);
+  const { period, filter, raw } = await readParams(searchParams);
+  const tab = (Array.isArray(raw.tab) ? raw.tab[0] : raw.tab) || "status";
+  const blank = (Array.isArray(raw.blank) ? raw.blank[0] : raw.blank) || "projetos";
+  const items = await getCheckPanel(period.from, period.to, filter);
 
   return (
     <div className="space-y-4">
@@ -35,7 +34,7 @@ export default async function CheckPage({
         {TABS.map((t) => (
           <Link
             key={t.id}
-            href={`/check?tab=${t.id}`}
+            href={hrefWith(raw, "/check", { tab: t.id })}
             className={cn("rounded-full border px-3 py-1 text-sm", tab === t.id ? "border-cyan bg-cyan text-white" : "border-line bg-card")}
           >
             {t.label}
@@ -61,7 +60,7 @@ export default async function CheckPage({
       ) : null}
 
       {tab === "branco" ? (
-        <BlankTab periodFrom={period.from} periodTo={period.to} field={blank} />
+        <BlankTab periodFrom={period.from} periodTo={period.to} field={blank} filter={filter} raw={raw} />
       ) : null}
 
       {tab === "duplicadas" ? (
@@ -77,7 +76,7 @@ export default async function CheckPage({
         </Card>
       ) : null}
 
-      {tab === "caixa" ? <CaixaCheck /> : null}
+      {tab === "caixa" ? <CaixaCheck filter={filter} /> : null}
 
       {tab === "rateio" ? (
         <Card>
@@ -100,15 +99,19 @@ async function BlankTab({
   periodFrom,
   periodTo,
   field,
+  filter,
+  raw,
 }: {
   periodFrom: string;
   periodTo: string;
   field: string;
+  filter?: DimFilter;
+  raw: Record<string, string | string[] | undefined>;
 }) {
   const key = ["projetos", "clientes", "categorias", "departamentos", "nfs"].includes(field)
     ? (field as "projetos" | "clientes" | "categorias" | "departamentos" | "nfs")
     : "projetos";
-  const rows = await getBlankDocs(periodFrom, periodTo, key);
+  const rows = await getBlankDocs(periodFrom, periodTo, key, filter);
   const pills = [
     { id: "clientes", label: "Clientes" },
     { id: "projetos", label: "Projetos" },
@@ -120,7 +123,7 @@ async function BlankTab({
     <div className="space-y-3">
       <div className="flex flex-wrap gap-2">
         {pills.map((p) => (
-          <Link key={p.id} href={`/check?tab=branco&blank=${p.id}`} className={cn("rounded-full border px-3 py-1 text-sm", key === p.id ? "border-cyan bg-cyan text-white" : "border-line bg-card")}>
+          <Link key={p.id} href={hrefWith(raw, "/check", { tab: "branco", blank: p.id })} className={cn("rounded-full border px-3 py-1 text-sm", key === p.id ? "border-cyan bg-cyan text-white" : "border-line bg-card")}>
             {p.label}
           </Link>
         ))}
@@ -136,8 +139,8 @@ async function BlankTab({
   );
 }
 
-async function CaixaCheck() {
-  const [omie, contas, saldo] = await Promise.all([getResumo(), getSaldoPorConta(), getSaldoAtual()]);
+async function CaixaCheck({ filter }: { filter?: DimFilter }) {
+  const [omie, contas, saldo] = await Promise.all([getResumo(), getSaldoPorConta(filter), getSaldoAtual(filter)]);
   const omieSaldo = omie?.cc_saldo_total ?? 0;
   const ok = Math.abs(omieSaldo - saldo.saldo) < 0.05;
   return (

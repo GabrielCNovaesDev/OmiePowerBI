@@ -10,10 +10,10 @@ export default async function SaldoPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { period } = await readParams(searchParams);
+  const { period, filter } = await readParams(searchParams);
   const [contas, evolucao] = await Promise.all([
-    getSaldoPorConta(),
-    getSaldoEvolucaoMensal(period.from, period.to),
+    getSaldoPorConta(filter),
+    getSaldoEvolucaoMensal(period.from, period.to, filter),
   ]);
 
   const months = [...new Set(evolucao.map((e) => e.mes))].sort();

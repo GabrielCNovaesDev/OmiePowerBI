@@ -12,9 +12,9 @@ export default async function PrevistoPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { period } = await readParams(searchParams);
+  const { period, filter } = await readParams(searchParams);
   const year = Number(period.from.slice(0, 4));
-  const [orc, real] = await Promise.all([getOrcamentoMensal(year), getResultadoMensal(period.from, period.to)]);
+  const [orc, real] = await Promise.all([getOrcamentoMensal(year, filter), getResultadoMensal(period.from, period.to, filter)]);
 
   if (!orc.length) {
     return (

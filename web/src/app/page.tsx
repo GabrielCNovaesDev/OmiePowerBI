@@ -3,7 +3,7 @@ import { DailyCashflow } from "@/components/charts";
 import { Card, DataTable, Signed, Standby, ToneCard } from "@/components/ui";
 import { compactMoney, formatDate, money } from "@/lib/format";
 import { getFluxoDiarioMes, getKpisDia, getSaldoAtual, getTitulosHoje } from "@/lib/dash";
-import { readParams } from "@/lib/params";
+import { hrefWith, readParams } from "@/lib/params";
 import { todayISO } from "@/lib/period";
 import { cn } from "@/lib/format";
 
@@ -19,11 +19,11 @@ export default async function ResumoPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { view } = await readParams(searchParams);
+  const { view, filter, raw } = await readParams(searchParams);
   if (view !== "hoje") {
     return (
       <div>
-        <ViewSwitch current={view} />
+        <ViewSwitch current={view} raw={raw} />
         <Standby
           title={`Resumo · ${VIEWS.find((v) => v.id === view)?.label}`}
           reason="Essa visualização não está nos prints de referência. Fica em standby até chegarem os screenshots de Semana, Mês e Atrasados."
@@ -35,11 +35,11 @@ export default async function ResumoPage({
   const today = todayISO();
   const monthStart = `${today.slice(0, 7)}-01`;
   const [saldo, kpis, receber, pagar, diario] = await Promise.all([
-    getSaldoAtual(),
-    getKpisDia(),
-    getTitulosHoje("R"),
-    getTitulosHoje("P"),
-    getFluxoDiarioMes(monthStart, today),
+    getSaldoAtual(filter),
+    getKpisDia(filter),
+    getTitulosHoje("R", filter),
+    getTitulosHoje("P", filter),
+    getFluxoDiarioMes(monthStart, today, filter),
   ]);
   const previsto = saldo.saldo + kpis.receberHoje - kpis.pagarHoje;
   const dateLabel = new Date(`${today}T00:00:00`).toLocaleDateString("pt-BR", {
@@ -51,7 +51,7 @@ export default async function ResumoPage({
 
   return (
     <div className="space-y-4">
-      <ViewSwitch current="hoje" />
+      <ViewSwitch current="hoje" raw={raw} />
       <div className="grid gap-4 xl:grid-cols-[320px_1fr]">
         <div className={cn("rounded-md p-5 text-white shadow-sm", saldo.saldo >= 0 ? "bg-gain" : "bg-pay")}>
           <p className="text-sm capitalize text-white/80">{dateLabel}</p>
@@ -123,13 +123,13 @@ export default async function ResumoPage({
   );
 }
 
-function ViewSwitch({ current }: { current: string }) {
+function ViewSwitch({ current, raw }: { current: string; raw: Record<string, string | string[] | undefined> }) {
   return (
     <div className="mb-2 flex flex-wrap gap-2">
       {VIEWS.map((v) => (
         <Link
           key={v.id}
-          href={`/?view=${v.id}`}
+          href={hrefWith(raw, "/", { view: v.id })}
           className={cn(
             "rounded border px-3 py-1 text-xs uppercase tracking-wide",
             current === v.id ? "border-cyan bg-cyan text-white" : "border-line bg-card text-mist hover:border-cyan"

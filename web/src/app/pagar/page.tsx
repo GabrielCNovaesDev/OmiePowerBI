@@ -4,17 +4,23 @@ import { Card, DataTable, Kpi, StatusPill } from "@/components/ui";
 import { compactMoney, formatDate, money } from "@/lib/format";
 import { getAgingBi, getAgingByDim } from "@/lib/dash";
 import { getStatusBreakdown, getTitulos } from "@/lib/queries";
+import { readParams } from "@/lib/params";
 
-export default async function PagarPage() {
+export default async function PagarPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const { filter } = await readParams(searchParams);
   const [atrasado, aVencer, catAtraso, fornAtraso, catVencer, fornVencer, titulos, status] = await Promise.all([
-    getAgingBi("P", true),
-    getAgingBi("P", false),
-    getAgingByDim("P", true, "categoria"),
-    getAgingByDim("P", true, "cliente"),
-    getAgingByDim("P", false, "categoria"),
-    getAgingByDim("P", false, "cliente"),
-    getTitulos("P"),
-    getStatusBreakdown("P"),
+    getAgingBi("P", true, filter),
+    getAgingBi("P", false, filter),
+    getAgingByDim("P", true, "categoria", filter),
+    getAgingByDim("P", true, "cliente", filter),
+    getAgingByDim("P", false, "categoria", filter),
+    getAgingByDim("P", false, "cliente", filter),
+    getTitulos("P", 80, filter),
+    getStatusBreakdown("P", filter),
   ]);
   const totAtraso = atrasado.reduce((s, x) => s + Number(x.valor), 0);
   const totVencer = aVencer.reduce((s, x) => s + Number(x.valor), 0);

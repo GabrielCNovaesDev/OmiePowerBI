@@ -1,6 +1,7 @@
 import { query } from "./db";
 import { n } from "./format";
 import { yearStartISO } from "./period";
+import { Binder, dimSql, type DimFilter } from "./params";
 
 const OPEN_R = `NOT IN ('CANCELADO','RECEBIDO','LIQUIDADO')`;
 const OPEN_P = `NOT IN ('CANCELADO','PAGO','LIQUIDADO')`;
@@ -46,7 +47,17 @@ function monthLabel(ym: string): string {
   return names[idx] ? `${names[idx]}` : ym;
 }
 
-export async function getSaldoAtual() {
+function tituloCols() {
+  return {
+    cliente: "t.codigo_cliente_omie",
+    categoria: "t.codigo_categoria",
+    conta: "t.codigo_cc_omie",
+    departamento: "t.codigo_departamento",
+  };
+}
+
+export async function getSaldoAtual(filter?: DimFilter) {
+  const b = new Binder();
   const rows = await query<Record<string, unknown>>(`
     SELECT COALESCE(SUM(s.saldo_atual),0)::float AS saldo,
            COALESCE(SUM(s.saldo_atual_previsto),0)::float AS previsto,
@@ -60,12 +71,14 @@ export async function getSaldoAtual() {
       LIMIT 1
     ) s ON true
     WHERE COALESCE(cc.inativa,'N') <> 'S'
-  `);
+      ${dimSql(b, filter, { conta: "cc.codigo_cc_omie" })}
+  `, b.values);
   const r = rows[0] ?? {};
   return { saldo: n(r.saldo), previsto: n(r.previsto), limite: n(r.limite) };
 }
 
-export async function getSaldoPorConta() {
+export async function getSaldoPorConta(filter?: DimFilter) {
+  const b = new Binder();
   return query<{ conta: string; saldo: number; previsto: number; disponivel: number }>(
     `SELECT cc.descricao AS conta,
             COALESCE(s.saldo_atual,0)::float AS saldo,
@@ -79,26 +92,34 @@ export async function getSaldoPorConta() {
        ORDER BY data_referencia DESC LIMIT 1
      ) s ON true
      WHERE COALESCE(cc.inativa,'N') <> 'S'
-     ORDER BY cc.descricao`
+       ${dimSql(b, filter, { conta: "cc.codigo_cc_omie" })}
+     ORDER BY cc.descricao`,
+    b.values
   );
 }
 
-export async function getSaldoEvolucaoMensal(from: string, to: string) {
+export async function getSaldoEvolucaoMensal(from: string, to: string, filter?: DimFilter) {
+  const b = new Binder();
+  const fromP = b.add(from);
+  const toP = b.add(to);
   const rows = await query<{ mes: string; conta: string; saldo: number }>(
     `SELECT to_char(date_trunc('month', s.data_referencia), 'YYYY-MM') AS mes,
             cc.descricao AS conta,
             (ARRAY_AGG(s.saldo_atual ORDER BY s.data_referencia DESC))[1]::float AS saldo
      FROM fato.saldo_conta_corrente s
      JOIN dim.conta_corrente cc ON cc.app_key=s.app_key AND cc.codigo_cc_omie=s.codigo_cc_omie
-     WHERE s.data_referencia BETWEEN $1::date AND $2::date
+     WHERE s.data_referencia BETWEEN ${fromP}::date AND ${toP}::date
+       ${dimSql(b, filter, { conta: "cc.codigo_cc_omie" })}
      GROUP BY 1, 2
      ORDER BY 1, 2`,
-    [from, to]
+    b.values
   );
   return rows;
 }
 
-export async function getTitulosHoje(natureza: "R" | "P"): Promise<TituloHoje[]> {
+export async function getTitulosHoje(natureza: "R" | "P", filter?: DimFilter): Promise<TituloHoje[]> {
+  const b = new Binder();
+  const nat = b.add(natureza);
   return query<TituloHoje>(
     `SELECT COALESCE(cat.descricao, t.codigo_categoria, '(sem categoria)') AS categoria,
             COALESCE(c.razao_social, '(sem cadastro)') AS cliente,
@@ -109,18 +130,20 @@ export async function getTitulosHoje(natureza: "R" | "P"): Promise<TituloHoje[]>
      FROM fato.titulo t
      LEFT JOIN dim.cliente c ON c.app_key=t.app_key AND c.codigo_cliente_omie=t.codigo_cliente_omie
      LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria
-     WHERE t.natureza=$1
+     WHERE t.natureza=${nat}
        AND t.status ${openClause(natureza)}
        AND t.valor_aberto > 0
        AND t.data_vencimento = CURRENT_DATE
+       ${dimSql(b, filter, tituloCols())}
      GROUP BY 1,2,3,4
      ORDER BY valor DESC
      LIMIT 40`,
-    [natureza]
+    b.values
   );
 }
 
-export async function getKpisDia() {
+export async function getKpisDia(filter?: DimFilter) {
+  const b = new Binder();
   const rows = await query<Record<string, unknown>>(`
     SELECT
       COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='R' AND status ${OPEN_R} AND data_vencimento = CURRENT_DATE),0)::float AS receber_hoje,
@@ -129,8 +152,9 @@ export async function getKpisDia() {
       COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='P' AND status='ATRASADO'),0)::float AS pagar_atraso,
       COUNT(*) FILTER (WHERE natureza='R' AND status ${OPEN_R} AND data_vencimento = CURRENT_DATE)::int AS qtd_receber,
       COUNT(*) FILTER (WHERE natureza='P' AND status ${OPEN_P} AND data_vencimento = CURRENT_DATE)::int AS qtd_pagar
-    FROM fato.titulo
-  `);
+    FROM fato.titulo t
+    WHERE 1=1 ${dimSql(b, filter, tituloCols())}
+  `, b.values);
   const r = rows[0] ?? {};
   return {
     receberHoje: n(r.receber_hoje),
@@ -142,19 +166,30 @@ export async function getKpisDia() {
   };
 }
 
-export async function getFluxoMensalCaixa(from: string, to: string): Promise<MonthCash[]> {
+export async function getFluxoMensalCaixa(from: string, to: string, filter?: DimFilter): Promise<MonthCash[]> {
+  const openB = new Binder();
+  const fromOpen = openB.add(from);
   const openingRows = await query<Record<string, unknown>>(
     `SELECT COALESCE(SUM(s.saldo_atual),0)::float AS saldo
      FROM dim.conta_corrente cc
      LEFT JOIN LATERAL (
        SELECT saldo_atual FROM fato.saldo_conta_corrente x
        WHERE x.app_key=cc.app_key AND x.codigo_cc_omie=cc.codigo_cc_omie
-         AND x.data_referencia < $1::date
+         AND x.data_referencia < ${fromOpen}::date
        ORDER BY data_referencia DESC LIMIT 1
      ) s ON true
-     WHERE COALESCE(cc.inativa,'N') <> 'S'`,
-    [from]
+     WHERE COALESCE(cc.inativa,'N') <> 'S'
+       ${dimSql(openB, filter, { conta: "cc.codigo_cc_omie" })}`,
+    openB.values
   );
+  const b = new Binder();
+  const fromP = b.add(from);
+  const toP = b.add(to);
+  const extratoDims = dimSql(b, filter, {
+    cliente: "e.codigo_cliente_omie",
+    categoria: "e.codigo_categoria",
+    conta: "e.codigo_cc_omie",
+  });
   const months = await query<Record<string, unknown>>(
     `SELECT to_char(date_trunc('month', e.data_lancamento), 'YYYY-MM') AS mes,
             COALESCE(SUM(ABS(e.valor_documento)) FILTER (
@@ -169,25 +204,31 @@ export async function getFluxoMensalCaixa(from: string, to: string): Promise<Mon
               ELSE 0 END),0)::float AS transf
      FROM fato.extrato_movimento e
      LEFT JOIN dim.categoria c ON c.app_key=e.app_key AND c.codigo=e.codigo_categoria
-     WHERE e.data_lancamento BETWEEN $1::date AND $2::date
+     WHERE e.data_lancamento BETWEEN ${fromP}::date AND ${toP}::date
        AND COALESCE(e.codigo_lancamento,0) <> 0
+       ${extratoDims}
      GROUP BY 1
      ORDER BY 1`,
-    [from, to]
+    b.values
   );
 
   let used = months;
   if (!used.length) {
+    const fb = new Binder();
+    const f1 = fb.add(from);
+    const f2 = fb.add(to);
     used = await query<Record<string, unknown>>(
       `SELECT to_char(date_trunc('month', b.data_baixa), 'YYYY-MM') AS mes,
-              COALESCE(SUM(b.valor_baixa) FILTER (WHERE b.natureza='R'),0)::float AS entrada,
-              COALESCE(SUM(b.valor_baixa) FILTER (WHERE b.natureza='P'),0)::float AS saida,
+              COALESCE(SUM(b.valor_baixa) FILTER (WHERE t.natureza='R'),0)::float AS entrada,
+              COALESCE(SUM(b.valor_baixa) FILTER (WHERE t.natureza='P'),0)::float AS saida,
               0::float AS transf
        FROM fato.baixa b
-       WHERE b.data_baixa BETWEEN $1::date AND $2::date
+       JOIN fato.titulo t ON t.app_key=b.app_key AND t.codigo_titulo_omie=b.codigo_titulo_omie
+       WHERE b.data_baixa BETWEEN ${f1}::date AND ${f2}::date
+         ${dimSql(fb, filter, tituloCols())}
        GROUP BY 1
        ORDER BY 1`,
-      [from, to]
+      fb.values
     );
   }
 
@@ -213,26 +254,34 @@ export async function getFluxoMensalCaixa(from: string, to: string): Promise<Mon
   });
 }
 
-export async function getFluxoDiarioMes(from: string, to: string): Promise<DailyPoint[]> {
+export async function getFluxoDiarioMes(from: string, to: string, filter?: DimFilter): Promise<DailyPoint[]> {
+  const a = new Binder();
+  const aFrom = a.add(from);
+  const aTo = a.add(to);
   const actual = await query<{ dia: string; entrada: number; saida: number }>(
     `SELECT e.data_lancamento::text AS dia,
             COALESCE(SUM(e.valor_documento) FILTER (WHERE e.natureza='E'),0)::float AS entrada,
             COALESCE(SUM(e.valor_documento) FILTER (WHERE e.natureza='S'),0)::float AS saida
      FROM fato.extrato_movimento e
-     WHERE e.data_lancamento BETWEEN $1::date AND $2::date
+     WHERE e.data_lancamento BETWEEN ${aFrom}::date AND ${aTo}::date
        AND COALESCE(e.codigo_lancamento,0) <> 0
+       ${dimSql(a, filter, { cliente: "e.codigo_cliente_omie", categoria: "e.codigo_categoria", conta: "e.codigo_cc_omie" })}
      GROUP BY 1
      ORDER BY 1`,
-    [from, to]
+    a.values
   );
+  const p = new Binder();
+  const pFrom = p.add(from);
+  const pTo = p.add(to);
   const prev = await query<{ dia: string; natureza: string; valor: number }>(
     `SELECT data_vencimento::text AS dia, natureza::text, COALESCE(SUM(valor_aberto),0)::float AS valor
-     FROM fato.titulo
-     WHERE data_vencimento BETWEEN GREATEST($1::date, CURRENT_DATE) AND $2::date
+     FROM fato.titulo t
+     WHERE data_vencimento BETWEEN GREATEST(${pFrom}::date, CURRENT_DATE) AND ${pTo}::date
        AND valor_aberto > 0
        AND status::text NOT IN ('CANCELADO','PAGO','RECEBIDO','LIQUIDADO')
+       ${dimSql(p, filter, tituloCols())}
      GROUP BY 1, 2`,
-    [from, to]
+    p.values
   );
 
   const map = new Map<string, DailyPoint>();
@@ -257,7 +306,7 @@ export async function getFluxoDiarioMes(from: string, to: string): Promise<Daily
     if (row.natureza === "P") item.previstoSaida = n(row.valor);
   }
 
-  const opening = await getSaldoAtual();
+  const opening = await getSaldoAtual(filter);
   const days = [...map.values()];
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
   let running = opening.saldo;
@@ -273,11 +322,13 @@ export async function getFluxoDiarioMes(from: string, to: string): Promise<Daily
   return days;
 }
 
-export async function getAgingBi(natureza: "R" | "P", atrasado: boolean): Promise<AgingSlice[]> {
+export async function getAgingBi(natureza: "R" | "P", atrasado: boolean, filter?: DimFilter): Promise<AgingSlice[]> {
   const sign = atrasado ? "CURRENT_DATE - t.data_vencimento" : "t.data_vencimento - CURRENT_DATE";
   const extra = atrasado
     ? `AND t.data_vencimento < CURRENT_DATE AND t.status = 'ATRASADO'`
     : `AND t.data_vencimento >= CURRENT_DATE AND t.status ${openClause(natureza)}`;
+  const b = new Binder();
+  const nat = b.add(natureza);
   return query<AgingSlice>(
     `SELECT CASE
               WHEN ${sign} < 30 THEN 'Menor que 30'
@@ -289,17 +340,19 @@ export async function getAgingBi(natureza: "R" | "P", atrasado: boolean): Promis
             COALESCE(SUM(t.valor_aberto),0)::float AS valor,
             COUNT(*)::int AS qtd
      FROM fato.titulo t
-     WHERE t.natureza=$1 AND t.valor_aberto > 0 AND t.status::text NOT IN ('CANCELADO','PAGO','RECEBIDO','LIQUIDADO')
+     WHERE t.natureza=${nat} AND t.valor_aberto > 0 AND t.status::text NOT IN ('CANCELADO','PAGO','RECEBIDO','LIQUIDADO')
        ${extra}
+       ${dimSql(b, filter, tituloCols())}
      GROUP BY 1`,
-    [natureza]
+    b.values
   );
 }
 
 export async function getAgingByDim(
   natureza: "R" | "P",
   atrasado: boolean,
-  dim: "categoria" | "cliente"
+  dim: "categoria" | "cliente",
+  filter?: DimFilter
 ): Promise<NamedValue[]> {
   const extra = atrasado
     ? `AND t.data_vencimento < CURRENT_DATE`
@@ -308,6 +361,8 @@ export async function getAgingByDim(
     dim === "categoria"
       ? `COALESCE(cat.descricao, t.codigo_categoria, '(sem categoria)')`
       : `COALESCE(c.razao_social, '(sem cadastro)')`;
+  const b = new Binder();
+  const nat = b.add(natureza);
   return query<NamedValue>(
     `SELECT ${nameExpr} AS nome,
             COALESCE(SUM(t.valor_aberto),0)::float AS valor,
@@ -315,13 +370,14 @@ export async function getAgingByDim(
      FROM fato.titulo t
      LEFT JOIN dim.cliente c ON c.app_key=t.app_key AND c.codigo_cliente_omie=t.codigo_cliente_omie
      LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria
-     WHERE t.natureza=$1 AND t.valor_aberto > 0
+     WHERE t.natureza=${nat} AND t.valor_aberto > 0
        AND t.status ${openClause(natureza)}
        ${extra}
+       ${dimSql(b, filter, tituloCols())}
      GROUP BY 1
      ORDER BY valor DESC
      LIMIT 12`,
-    [natureza]
+    b.values
   );
 }
 
@@ -349,10 +405,14 @@ function kindSql(kind: Kind) {
   ))`;
 }
 
-export async function getBreakdown(kind: Kind, from: string, to: string, base: "caixa" | "comp") {
+export async function getBreakdown(kind: Kind, from: string, to: string, base: "caixa" | "comp", filter?: DimFilter) {
   const dateCol = base === "caixa" ? "COALESCE(t.data_pagamento, t.data_vencimento)" : "COALESCE(t.data_emissao, t.data_registro, t.data_vencimento)";
   const valueCol = base === "caixa" ? "CASE WHEN t.valor_pago > 0 THEN t.valor_pago ELSE t.valor_titulo END" : "t.valor_titulo";
   const filtro = kindSql(kind);
+  const b = new Binder();
+  const fromP = b.add(from);
+  const toP = b.add(to);
+  const dims = dimSql(b, filter, tituloCols());
   const join = `
     FROM fato.titulo t
     LEFT JOIN dim.cliente c ON c.app_key=t.app_key AND c.codigo_cliente_omie=t.codigo_cliente_omie
@@ -360,23 +420,27 @@ export async function getBreakdown(kind: Kind, from: string, to: string, base: "
     LEFT JOIN dim.dre d ON d.app_key=t.app_key AND d.codigo_dre=cat.codigo_dre
     WHERE ${filtro}
       AND t.status::text <> 'CANCELADO'
-      AND ${dateCol} BETWEEN $1::date AND $2::date
+      AND ${dateCol} BETWEEN ${fromP}::date AND ${toP}::date
+      ${dims}
   `;
 
   const [cnpj, status, uf, clientes, categorias, projetos] = await Promise.all([
-    query<NamedValue>(`SELECT COALESCE(c.cnpj_cpf, '(sem CNPJ)') AS nome, COALESCE(SUM(${valueCol}),0)::float AS valor ${join} GROUP BY 1 ORDER BY valor DESC LIMIT 8`, [from, to]),
-    query<NamedValue>(`SELECT t.status::text AS nome, COALESCE(SUM(${valueCol}),0)::float AS valor ${join} GROUP BY 1 ORDER BY valor DESC`, [from, to]),
-    query<NamedValue>(`SELECT COALESCE(NULLIF(c.estado,''), '(sem UF)') AS nome, COALESCE(SUM(${valueCol}),0)::float AS valor ${join} GROUP BY 1 ORDER BY valor DESC`, [from, to]),
-    query<NamedValue>(`SELECT COALESCE(c.razao_social,'(sem cadastro)') AS nome, COALESCE(SUM(${valueCol}),0)::float AS valor ${join} GROUP BY 1 ORDER BY valor DESC LIMIT 15`, [from, to]),
-    query<NamedValue>(`SELECT COALESCE(cat.descricao, t.codigo_categoria, '(sem categoria)') AS nome, COALESCE(SUM(${valueCol}),0)::float AS valor ${join} GROUP BY 1 ORDER BY valor DESC LIMIT 12`, [from, to]),
-    query<NamedValue>(`SELECT COALESCE(t.codigo_projeto::text, '(em branco)') AS nome, COALESCE(SUM(${valueCol}),0)::float AS valor ${join} GROUP BY 1 ORDER BY valor DESC LIMIT 8`, [from, to]),
+    query<NamedValue>(`SELECT COALESCE(c.cnpj_cpf, '(sem CNPJ)') AS nome, COALESCE(SUM(${valueCol}),0)::float AS valor ${join} GROUP BY 1 ORDER BY valor DESC LIMIT 8`, b.values),
+    query<NamedValue>(`SELECT t.status::text AS nome, COALESCE(SUM(${valueCol}),0)::float AS valor ${join} GROUP BY 1 ORDER BY valor DESC`, b.values),
+    query<NamedValue>(`SELECT COALESCE(NULLIF(c.estado,''), '(sem UF)') AS nome, COALESCE(SUM(${valueCol}),0)::float AS valor ${join} GROUP BY 1 ORDER BY valor DESC`, b.values),
+    query<NamedValue>(`SELECT COALESCE(c.razao_social,'(sem cadastro)') AS nome, COALESCE(SUM(${valueCol}),0)::float AS valor ${join} GROUP BY 1 ORDER BY valor DESC LIMIT 15`, b.values),
+    query<NamedValue>(`SELECT COALESCE(cat.descricao, t.codigo_categoria, '(sem categoria)') AS nome, COALESCE(SUM(${valueCol}),0)::float AS valor ${join} GROUP BY 1 ORDER BY valor DESC LIMIT 12`, b.values),
+    query<NamedValue>(`SELECT COALESCE(t.codigo_projeto::text, '(em branco)') AS nome, COALESCE(SUM(${valueCol}),0)::float AS valor ${join} GROUP BY 1 ORDER BY valor DESC LIMIT 8`, b.values),
   ]);
 
   const total = clientes.reduce((s, x) => s + n(x.valor), 0);
   return { total, cnpj, status, uf, clientes, categorias, projetos };
 }
 
-export async function getResultado(from: string, to: string) {
+export async function getResultado(from: string, to: string, filter?: DimFilter) {
+  const b = new Binder();
+  const fromP = b.add(from);
+  const toP = b.add(to);
   const rows = await query<Record<string, unknown>>(
     `SELECT
        COALESCE(SUM(b.valor_baixa) FILTER (WHERE t.natureza='R' AND COALESCE(cat.transferencia,'N')<>'S'),0)::float AS receita,
@@ -390,8 +454,9 @@ export async function getResultado(from: string, to: string) {
      JOIN fato.titulo t ON t.app_key=b.app_key AND t.codigo_titulo_omie=b.codigo_titulo_omie
      LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria
      LEFT JOIN dim.dre d ON d.app_key=t.app_key AND d.codigo_dre=cat.codigo_dre
-     WHERE b.data_baixa BETWEEN $1::date AND $2::date`,
-    [from, to]
+     WHERE b.data_baixa BETWEEN ${fromP}::date AND ${toP}::date
+       ${dimSql(b, filter, tituloCols())}`,
+    b.values
   );
   const r = rows[0] ?? {};
   const receita = n(r.receita);
@@ -402,7 +467,10 @@ export async function getResultado(from: string, to: string) {
   return { receita, custos, despesas, bruto, ebitda, resultado: ebitda };
 }
 
-export async function getResultadoMensal(from: string, to: string) {
+export async function getResultadoMensal(from: string, to: string, filter?: DimFilter) {
+  const b = new Binder();
+  const fromP = b.add(from);
+  const toP = b.add(to);
   return query<{ mes: string; receita: number; custos: number; despesas: number; resultado: number }>(
     `SELECT to_char(date_trunc('month', b.data_baixa), 'YYYY-MM') AS mes,
             COALESCE(SUM(b.valor_baixa) FILTER (WHERE t.natureza='R' AND COALESCE(cat.transferencia,'N')<>'S'),0)::float AS receita,
@@ -417,10 +485,11 @@ export async function getResultadoMensal(from: string, to: string) {
      JOIN fato.titulo t ON t.app_key=b.app_key AND t.codigo_titulo_omie=b.codigo_titulo_omie
      LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria
      LEFT JOIN dim.dre d ON d.app_key=t.app_key AND d.codigo_dre=cat.codigo_dre
-     WHERE b.data_baixa BETWEEN $1::date AND $2::date
+     WHERE b.data_baixa BETWEEN ${fromP}::date AND ${toP}::date
+       ${dimSql(b, filter, tituloCols())}
      GROUP BY 1
      ORDER BY 1`,
-    [from, to]
+    b.values
   ).then((rows) =>
     rows.map((row) => ({
       ...row,
@@ -429,7 +498,10 @@ export async function getResultadoMensal(from: string, to: string) {
   );
 }
 
-export async function getDreLinhas(from: string, to: string) {
+export async function getDreLinhas(from: string, to: string, filter?: DimFilter) {
+  const b = new Binder();
+  const fromP = b.add(from);
+  const toP = b.add(to);
   return query<{ codigo: string; descricao: string; nivel: number; sinal: string | null; valor: number }>(
     `SELECT COALESCE(d.codigo_dre, cat.codigo, '(sem DRE)') AS codigo,
             COALESCE(d.descricao, cat.descricao, '(sem vínculo DRE)') AS descricao,
@@ -440,16 +512,19 @@ export async function getDreLinhas(from: string, to: string) {
      JOIN fato.titulo t ON t.app_key=b.app_key AND t.codigo_titulo_omie=b.codigo_titulo_omie
      LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria
      LEFT JOIN dim.dre d ON d.app_key=t.app_key AND d.codigo_dre=cat.codigo_dre
-     WHERE b.data_baixa BETWEEN $1::date AND $2::date
+     WHERE b.data_baixa BETWEEN ${fromP}::date AND ${toP}::date
        AND COALESCE(cat.transferencia,'N') <> 'S'
+       ${dimSql(b, filter, tituloCols())}
      GROUP BY 1,2,3,4
      ORDER BY 1`,
-    [from, to]
+    b.values
   );
 }
 
-export async function getOrcamentoMensal(year?: number) {
+export async function getOrcamentoMensal(year?: number, filter?: DimFilter) {
   const y = year ?? new Date().getFullYear();
+  const b = new Binder();
+  const yearP = b.add(y);
   return query<{ mes: number; previsto: number; realizado: number; tipo: string }>(
     `SELECT o.mes,
             COALESCE(SUM(o.valor_previsto),0)::float AS previsto,
@@ -460,36 +535,45 @@ export async function getOrcamentoMensal(year?: number) {
             END AS tipo
      FROM fato.orcamento_caixa o
      LEFT JOIN dim.categoria c ON c.app_key=o.app_key AND c.codigo=o.codigo_categoria
-     WHERE o.ano=$1
+     WHERE o.ano=${yearP}
+       ${dimSql(b, filter, { categoria: "o.codigo_categoria" })}
      GROUP BY 1, 4
      ORDER BY 1`,
-    [y]
+    b.values
   );
 }
 
-export async function getQaClientes(from: string, to: string) {
+export async function getQaClientes(from: string, to: string, filter?: DimFilter) {
+  const currentB = new Binder();
+  const cFrom = currentB.add(from);
+  const cTo = currentB.add(to);
   const current = await query<NamedValue>(
     `SELECT COALESCE(c.razao_social,'(sem cadastro)') AS nome,
             COALESCE(SUM(b.valor_baixa),0)::float AS valor
      FROM fato.baixa b
      JOIN fato.titulo t ON t.app_key=b.app_key AND t.codigo_titulo_omie=b.codigo_titulo_omie
      LEFT JOIN dim.cliente c ON c.app_key=t.app_key AND c.codigo_cliente_omie=t.codigo_cliente_omie
-     WHERE t.natureza='R' AND b.data_baixa BETWEEN $1::date AND $2::date
+     WHERE t.natureza='R' AND b.data_baixa BETWEEN ${cFrom}::date AND ${cTo}::date
+       ${dimSql(currentB, filter, tituloCols())}
      GROUP BY 1
      ORDER BY valor DESC`,
-    [from, to]
+    currentB.values
   );
   const prevFrom = shiftYear(from, -1);
   const prevTo = shiftYear(to, -1);
+  const prevB = new Binder();
+  const pFrom = prevB.add(prevFrom);
+  const pTo = prevB.add(prevTo);
   const previous = await query<NamedValue>(
     `SELECT COALESCE(c.razao_social,'(sem cadastro)') AS nome,
             COALESCE(SUM(b.valor_baixa),0)::float AS valor
      FROM fato.baixa b
      JOIN fato.titulo t ON t.app_key=b.app_key AND t.codigo_titulo_omie=b.codigo_titulo_omie
      LEFT JOIN dim.cliente c ON c.app_key=t.app_key AND c.codigo_cliente_omie=t.codigo_cliente_omie
-     WHERE t.natureza='R' AND b.data_baixa BETWEEN $1::date AND $2::date
+     WHERE t.natureza='R' AND b.data_baixa BETWEEN ${pFrom}::date AND ${pTo}::date
+       ${dimSql(prevB, filter, tituloCols())}
      GROUP BY 1`,
-    [prevFrom, prevTo]
+    prevB.values
   );
   const prevMap = new Map(previous.map((p) => [p.nome, n(p.valor)]));
   const yoy = current
@@ -513,7 +597,11 @@ function shiftYear(isoDate: string, years: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-export async function getCheckPanel(from: string, to: string) {
+export async function getCheckPanel(from: string, to: string, filter?: DimFilter) {
+  const bind = new Binder();
+  const fromP = bind.add(from);
+  const toP = bind.add(to);
+  const extra = dimSql(bind, filter, tituloCols());
   const blank = await query<Record<string, unknown>>(
     `SELECT
        COUNT(*) FILTER (WHERE t.codigo_cliente_omie IS NULL)::int AS clientes,
@@ -523,8 +611,9 @@ export async function getCheckPanel(from: string, to: string) {
        COUNT(*) FILTER (WHERE t.numero_documento_fiscal IS NULL OR t.numero_documento_fiscal='')::int AS nfs,
        COUNT(*) FILTER (WHERE t.data_emissao IS NULL)::int AS sem_emissao
      FROM fato.titulo t
-     WHERE COALESCE(t.data_vencimento, t.data_emissao, CURRENT_DATE) BETWEEN $1::date AND $2::date`,
-    [from, to]
+     WHERE COALESCE(t.data_vencimento, t.data_emissao, CURRENT_DATE) BETWEEN ${fromP}::date AND ${toP}::date
+       ${extra}`,
+    bind.values
   );
   const dre = await query<Record<string, unknown>>(
     `SELECT COUNT(*)::int AS qtd
@@ -554,7 +643,12 @@ export async function getCheckPanel(from: string, to: string) {
   return items;
 }
 
-export async function getBlankDocs(from: string, to: string, field: "projetos" | "clientes" | "categorias" | "departamentos" | "nfs") {
+export async function getBlankDocs(
+  from: string,
+  to: string,
+  field: "projetos" | "clientes" | "categorias" | "departamentos" | "nfs",
+  filter?: DimFilter
+) {
   const where =
     field === "projetos"
       ? "t.codigo_projeto IS NULL"
@@ -565,6 +659,10 @@ export async function getBlankDocs(from: string, to: string, field: "projetos" |
           : field === "departamentos"
             ? "t.codigo_departamento IS NULL OR t.codigo_departamento=''"
             : "t.numero_documento_fiscal IS NULL OR t.numero_documento_fiscal=''";
+  const b = new Binder();
+  const fromP = b.add(from);
+  const toP = b.add(to);
+  const extra = dimSql(b, filter, tituloCols());
   return query<{
     cnpj: string | null;
     nf: string | null;
@@ -582,73 +680,67 @@ export async function getBlankDocs(from: string, to: string, field: "projetos" |
      LEFT JOIN dim.cliente c ON c.app_key=t.app_key AND c.codigo_cliente_omie=t.codigo_cliente_omie
      LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria
      WHERE ${where}
-       AND COALESCE(t.data_vencimento, t.data_emissao, CURRENT_DATE) BETWEEN $1::date AND $2::date
+       AND COALESCE(t.data_vencimento, t.data_emissao, CURRENT_DATE) BETWEEN ${fromP}::date AND ${toP}::date
+       ${extra}
      ORDER BY t.valor_titulo DESC
      LIMIT 80`,
-    [from, to]
+    b.values
   );
 }
 
-export async function getInadimplenciaMensal() {
+export async function getInadimplenciaMensal(filter?: DimFilter) {
   const from = yearStartISO();
+  const b = new Binder();
+  const fromP = b.add(from);
   return query<{ mes: string; taxa: number }>(
     `SELECT to_char(date_trunc('month', t.data_vencimento), 'YYYY-MM') AS mes,
             CASE WHEN SUM(t.valor_titulo)=0 THEN 0
                  ELSE SUM(t.valor_aberto) FILTER (WHERE t.status='ATRASADO') / NULLIF(SUM(t.valor_titulo),0)
             END::float AS taxa
      FROM fato.titulo t
-     WHERE t.natureza='R' AND t.data_vencimento >= $1::date
+     WHERE t.natureza='R' AND t.data_vencimento >= ${fromP}::date
+       ${dimSql(b, filter, tituloCols())}
      GROUP BY 1
      ORDER BY 1`,
-    [from]
+    b.values
   );
 }
 
-export async function getEntradasSaidas(from: string, to: string) {
-  const recCat = await query<NamedValue>(
-    `SELECT COALESCE(cat.descricao, t.codigo_categoria, '(sem)') AS nome,
-            COALESCE(SUM(b.valor_baixa),0)::float AS valor
-     FROM fato.baixa b
-     JOIN fato.titulo t ON t.app_key=b.app_key AND t.codigo_titulo_omie=b.codigo_titulo_omie
-     LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria
-     WHERE t.natureza='R' AND b.data_baixa BETWEEN $1::date AND $2::date
-     GROUP BY 1 ORDER BY valor DESC LIMIT 10`,
-    [from, to]
-  );
-  const recCli = await query<NamedValue>(
-    `SELECT COALESCE(c.razao_social,'(sem cadastro)') AS nome,
-            COALESCE(SUM(b.valor_baixa),0)::float AS valor
-     FROM fato.baixa b
-     JOIN fato.titulo t ON t.app_key=b.app_key AND t.codigo_titulo_omie=b.codigo_titulo_omie
-     LEFT JOIN dim.cliente c ON c.app_key=t.app_key AND c.codigo_cliente_omie=t.codigo_cliente_omie
-     WHERE t.natureza='R' AND b.data_baixa BETWEEN $1::date AND $2::date
-     GROUP BY 1 ORDER BY valor DESC LIMIT 10`,
-    [from, to]
-  );
-  const pagCat = await query<NamedValue>(
-    `SELECT COALESCE(cat.descricao, t.codigo_categoria, '(sem)') AS nome,
-            COALESCE(SUM(b.valor_baixa),0)::float AS valor
-     FROM fato.baixa b
-     JOIN fato.titulo t ON t.app_key=b.app_key AND t.codigo_titulo_omie=b.codigo_titulo_omie
-     LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria
-     WHERE t.natureza='P' AND b.data_baixa BETWEEN $1::date AND $2::date
-     GROUP BY 1 ORDER BY valor DESC LIMIT 10`,
-    [from, to]
-  );
-  const pagForn = await query<NamedValue>(
-    `SELECT COALESCE(c.razao_social,'(sem cadastro)') AS nome,
-            COALESCE(SUM(b.valor_baixa),0)::float AS valor
-     FROM fato.baixa b
-     JOIN fato.titulo t ON t.app_key=b.app_key AND t.codigo_titulo_omie=b.codigo_titulo_omie
-     LEFT JOIN dim.cliente c ON c.app_key=t.app_key AND c.codigo_cliente_omie=t.codigo_cliente_omie
-     WHERE t.natureza='P' AND b.data_baixa BETWEEN $1::date AND $2::date
-     GROUP BY 1 ORDER BY valor DESC LIMIT 10`,
-    [from, to]
-  );
+export async function getEntradasSaidas(from: string, to: string, filter?: DimFilter) {
+  async function slice(natureza: "R" | "P", by: "cat" | "cli") {
+    const b = new Binder();
+    const fromP = b.add(from);
+    const toP = b.add(to);
+    const name =
+      by === "cat"
+        ? `COALESCE(cat.descricao, t.codigo_categoria, '(sem)')`
+        : `COALESCE(c.razao_social,'(sem cadastro)')`;
+    return query<NamedValue>(
+      `SELECT ${name} AS nome,
+              COALESCE(SUM(bx.valor_baixa),0)::float AS valor
+       FROM fato.baixa bx
+       JOIN fato.titulo t ON t.app_key=bx.app_key AND t.codigo_titulo_omie=bx.codigo_titulo_omie
+       LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria
+       LEFT JOIN dim.cliente c ON c.app_key=t.app_key AND c.codigo_cliente_omie=t.codigo_cliente_omie
+       WHERE t.natureza='${natureza}' AND bx.data_baixa BETWEEN ${fromP}::date AND ${toP}::date
+         ${dimSql(b, filter, tituloCols())}
+       GROUP BY 1 ORDER BY valor DESC LIMIT 10`,
+      b.values
+    );
+  }
+  const [recCat, recCli, pagCat, pagForn] = await Promise.all([
+    slice("R", "cat"),
+    slice("R", "cli"),
+    slice("P", "cat"),
+    slice("P", "cli"),
+  ]);
   return { recCat, recCli, pagCat, pagForn };
 }
 
-export async function getNfs(from: string, to: string) {
+export async function getNfs(from: string, to: string, filter?: DimFilter) {
+  const b = new Binder();
+  const fromP = b.add(from);
+  const toP = b.add(to);
   return query<{
     numero: string | null;
     lancamento: string | null;
@@ -664,24 +756,28 @@ export async function getNfs(from: string, to: string) {
      LEFT JOIN dim.cliente c ON c.app_key=t.app_key AND c.codigo_cliente_omie=t.codigo_cliente_omie
      LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria
      WHERE t.numero_documento_fiscal IS NOT NULL AND t.numero_documento_fiscal <> ''
-       AND COALESCE(t.data_emissao, t.data_vencimento) BETWEEN $1::date AND $2::date
+       AND COALESCE(t.data_emissao, t.data_vencimento) BETWEEN ${fromP}::date AND ${toP}::date
+       ${dimSql(b, filter, tituloCols())}
      ORDER BY t.data_emissao DESC NULLS LAST
      LIMIT 80`,
-    [from, to]
+    b.values
   );
 }
 
 export async function getFilterOptions() {
-  const [categorias, contas, clientes] = await Promise.all([
+  const [categorias, contas, clientes, departamentos] = await Promise.all([
     query<{ codigo: string; descricao: string }>(
-      `SELECT codigo, descricao FROM dim.categoria WHERE COALESCE(conta_inativa,'N')<>'S' ORDER BY descricao LIMIT 80`
+      `SELECT codigo, descricao FROM dim.categoria WHERE COALESCE(conta_inativa,'N')<>'S' ORDER BY descricao LIMIT 400`
     ),
     query<{ codigo: string; descricao: string }>(
       `SELECT codigo_cc_omie::text AS codigo, descricao FROM dim.conta_corrente WHERE COALESCE(inativa,'N')<>'S' ORDER BY descricao`
     ),
     query<{ codigo: string; descricao: string }>(
-      `SELECT codigo_cliente_omie::text AS codigo, razao_social AS descricao FROM dim.cliente WHERE COALESCE(inativo,'N')<>'S' ORDER BY razao_social LIMIT 80`
+      `SELECT codigo_cliente_omie::text AS codigo, razao_social AS descricao FROM dim.cliente WHERE COALESCE(inativo,'N')<>'S' ORDER BY razao_social LIMIT 400`
+    ),
+    query<{ codigo: string; descricao: string }>(
+      `SELECT codigo, descricao FROM dim.departamento WHERE COALESCE(inativo,'N')<>'S' ORDER BY descricao LIMIT 200`
     ),
   ]);
-  return { categorias, contas, clientes };
+  return { categorias, contas, clientes, departamentos };
 }

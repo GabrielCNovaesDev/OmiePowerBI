@@ -17,8 +17,8 @@ export default async function KindPage({
   kind: Kind;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { period, base } = await readParams(searchParams);
-  const data = await getBreakdown(kind, period.from, period.to, base);
+  const { period, base, filter } = await readParams(searchParams);
+  const data = await getBreakdown(kind, period.from, period.to, base, filter);
   const copy = COPY[kind];
   return (
     <div className="space-y-4">

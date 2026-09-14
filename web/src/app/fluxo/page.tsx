@@ -3,7 +3,7 @@ import { PageHeader } from "@/components/shell";
 import { Card, DataTable, Signed, Standby } from "@/components/ui";
 import { money } from "@/lib/format";
 import { getFluxoMensalCaixa } from "@/lib/dash";
-import { readParams } from "@/lib/params";
+import { hrefWith, readParams } from "@/lib/params";
 import Link from "next/link";
 import { cn } from "@/lib/format";
 
@@ -12,14 +12,13 @@ export default async function FluxoPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { period } = await readParams(searchParams);
-  const sp = await searchParams;
-  const modo = Array.isArray(sp.modo) ? sp.modo[0] : sp.modo;
+  const { period, filter, raw } = await readParams(searchParams);
+  const modo = Array.isArray(raw.modo) ? raw.modo[0] : raw.modo;
   if (modo === "previsto" || modo === "ambos") {
     return (
       <div>
         <PageHeader kicker="Dashboards" title="Fluxo de Caixa" />
-        <ModeSwitch current={modo} />
+        <ModeSwitch current={modo} raw={raw} />
         <Standby
           title={modo === "previsto" ? "Fluxo previsto" : "Atual + Previsto"}
           reason="Os prints documentam o modo Atual com tabela mensal. Previsto e Atual+Previsto ficam em standby."
@@ -28,12 +27,12 @@ export default async function FluxoPage({
     );
   }
 
-  const months = await getFluxoMensalCaixa(period.from, period.to);
+  const months = await getFluxoMensalCaixa(period.from, period.to, filter);
 
   return (
     <div className="space-y-4">
       <PageHeader kicker="Dashboards" title="Fluxo de Caixa" subtitle={`${period.label} · realizado de extrato/baixas Omie`} />
-      <ModeSwitch current="atual" />
+      <ModeSwitch current="atual" raw={raw} />
       <Card>
         <p className="mb-2 text-sm font-semibold">Fluxo de Caixa Atual</p>
         <ComboCashflow
@@ -59,7 +58,7 @@ export default async function FluxoPage({
   );
 }
 
-function ModeSwitch({ current }: { current: string }) {
+function ModeSwitch({ current, raw }: { current: string; raw: Record<string, string | string[] | undefined> }) {
   const items = [
     { id: "atual", label: "Atual" },
     { id: "previsto", label: "Previsto" },
@@ -70,7 +69,7 @@ function ModeSwitch({ current }: { current: string }) {
       {items.map((item) => (
         <Link
           key={item.id}
-          href={`/fluxo?modo=${item.id}`}
+          href={hrefWith(raw, "/fluxo", { modo: item.id })}
           className={cn(
             "rounded border px-4 py-1.5 text-sm",
             current === item.id ? "border-cyan bg-cyan text-white" : "border-line bg-card hover:border-cyan"

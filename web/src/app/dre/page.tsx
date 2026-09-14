@@ -9,8 +9,8 @@ export default async function DrePage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { period } = await readParams(searchParams);
-  const [linhas, kpi] = await Promise.all([getDreLinhas(period.from, period.to), getResultado(period.from, period.to)]);
+  const { period, filter } = await readParams(searchParams);
+  const [linhas, kpi] = await Promise.all([getDreLinhas(period.from, period.to, filter), getResultado(period.from, period.to, filter)]);
   const waterfallLabels = ["(+) Receita", "(=) Custos", "(=) Despesas", "(=) Resultado"];
   const waterfallValues = [kpi.receita, -kpi.custos, -kpi.despesas, kpi.resultado];
 

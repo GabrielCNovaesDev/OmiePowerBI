@@ -9,8 +9,8 @@ export default async function NfsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { period } = await readParams(searchParams);
-  const rows = await getNfs(period.from, period.to);
+  const { period, filter } = await readParams(searchParams);
+  const rows = await getNfs(period.from, period.to, filter);
   const total = rows.reduce((s, r) => s + Number(r.valor), 0);
 
   return (

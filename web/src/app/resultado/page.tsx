@@ -9,8 +9,8 @@ export default async function ResultadoPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { period } = await readParams(searchParams);
-  const [kpi, monthly] = await Promise.all([getResultado(period.from, period.to), getResultadoMensal(period.from, period.to)]);
+  const { period, filter } = await readParams(searchParams);
+  const [kpi, monthly] = await Promise.all([getResultado(period.from, period.to, filter), getResultadoMensal(period.from, period.to, filter)]);
   const labels = monthly.map((m) => m.mes.slice(5));
   const pctBruto = kpi.receita ? (kpi.bruto / kpi.receita) * 100 : 0;
   const pctDesp = kpi.receita ? (kpi.despesas / kpi.receita) * 100 : 0;

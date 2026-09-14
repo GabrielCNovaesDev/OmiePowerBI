@@ -2,9 +2,15 @@ import { PageHeader } from "@/components/shell";
 import { Card, DataTable, Kpi } from "@/components/ui";
 import { formatDate, money } from "@/lib/format";
 import { getContas, getExtrato } from "@/lib/queries";
+import { readParams } from "@/lib/params";
 
-export default async function ExtratoPage() {
-  const [contas, movimentos] = await Promise.all([getContas(), getExtrato(150)]);
+export default async function ExtratoPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const { filter } = await readParams(searchParams);
+  const [contas, movimentos] = await Promise.all([getContas(filter), getExtrato(150, filter)]);
   const saldo = contas.reduce((s, c) => s + Number(c.saldo), 0);
 
   return (

@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/shell";
 import { Card, DataTable, Signed, Standby, ToneCard } from "@/components/ui";
 import { formatDate, money } from "@/lib/format";
 import { getFluxoDiarioMes, getKpisDia, getSaldoAtual, getSaldoPorConta, getTitulosHoje } from "@/lib/dash";
+import { hrefWith, readParams } from "@/lib/params";
 import { todayISO } from "@/lib/period";
 import { cn } from "@/lib/format";
 import Link from "next/link";
@@ -12,13 +13,13 @@ export default async function DiarioPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const sp = await searchParams;
-  const page = Number(Array.isArray(sp.p) ? sp.p[0] : sp.p) || 1;
+  const { filter, raw } = await readParams(searchParams);
+  const page = Number(Array.isArray(raw.p) ? raw.p[0] : raw.p) || 1;
   if (page !== 1) {
     return (
       <div>
         <PageHeader kicker="Relatórios" title="Relatório Diário Financeiro" />
-        <Pager current={page} />
+        <Pager current={page} raw={raw} />
         <Standby title={`Página ${page} de 10`} reason="Só a página 1 (Fluxo de Caixa do dia) está documentada nos prints. As demais ficam em standby." />
       </div>
     );
@@ -29,12 +30,12 @@ export default async function DiarioPage({
   weekAgo.setDate(weekAgo.getDate() - 6);
   const weekFrom = weekAgo.toISOString().slice(0, 10);
   const [saldo, kpis, contas, receber, pagar, semana] = await Promise.all([
-    getSaldoAtual(),
-    getKpisDia(),
-    getSaldoPorConta(),
-    getTitulosHoje("R"),
-    getTitulosHoje("P"),
-    getFluxoDiarioMes(weekFrom, today),
+    getSaldoAtual(filter),
+    getKpisDia(filter),
+    getSaldoPorConta(filter),
+    getTitulosHoje("R", filter),
+    getTitulosHoje("P", filter),
+    getFluxoDiarioMes(weekFrom, today, filter),
   ]);
   const resultado = kpis.receberHoje - kpis.pagarHoje;
   const previsto = saldo.saldo + resultado;
@@ -42,7 +43,7 @@ export default async function DiarioPage({
   return (
     <div className="space-y-4">
       <PageHeader kicker="Relatórios" title="Relatório Diário Financeiro" subtitle={`Data de referência: ${formatDate(today)}`} />
-      <Pager current={1} />
+      <Pager current={1} raw={raw} />
       <div className="rounded bg-cyan px-4 py-2 text-sm font-semibold text-white">Fluxo de Caixa</div>
       <div className="grid gap-3 md:grid-cols-5">
         <ToneCard label="Saldo inicial (hoje)" value={saldo.saldo} tone={saldo.saldo >= 0 ? "gain" : "loss"} />
@@ -92,7 +93,7 @@ export default async function DiarioPage({
   );
 }
 
-function Pager({ current }: { current: number }) {
+function Pager({ current, raw }: { current: number; raw: Record<string, string | string[] | undefined> }) {
   return (
     <div className="flex items-center gap-2 text-sm text-mist">
       <span>
@@ -101,7 +102,7 @@ function Pager({ current }: { current: number }) {
       {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((p) => (
         <Link
           key={p}
-          href={`/diario?p=${p}`}
+          href={hrefWith(raw, "/diario", { p: String(p) })}
           className={cn("rounded px-2 py-0.5", current === p ? "bg-cyan text-white" : "hover:bg-paper")}
         >
           {p}

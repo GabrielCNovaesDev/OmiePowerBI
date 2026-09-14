@@ -1,5 +1,6 @@
 import { query } from "./db";
 import { n } from "./format";
+import { Binder, dimSql, type DimFilter } from "./params";
 
 export type Empresa = {
   razao_social: string;
@@ -146,7 +147,10 @@ export type TituloRow = {
   origem: string | null;
 };
 
-export async function getTitulos(natureza: "R" | "P", limit = 80): Promise<TituloRow[]> {
+export async function getTitulos(natureza: "R" | "P", limit = 80, filter?: DimFilter): Promise<TituloRow[]> {
+  const b = new Binder();
+  const nat = b.add(natureza);
+  const lim = b.add(limit);
   const rows = await query<Record<string, unknown>>(
     `SELECT t.codigo_titulo_omie::text, t.numero_titulo, c.razao_social, t.status::text,
             t.data_vencimento::text, t.data_emissao::text,
@@ -155,14 +159,15 @@ export async function getTitulos(natureza: "R" | "P", limit = 80): Promise<Titul
      FROM fato.titulo t
      LEFT JOIN dim.cliente c ON c.app_key=t.app_key AND c.codigo_cliente_omie=t.codigo_cliente_omie
      LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria
-     WHERE t.natureza=$1
+     WHERE t.natureza=${nat}
+       ${dimSql(b, filter, { cliente: "t.codigo_cliente_omie", categoria: "t.codigo_categoria", conta: "t.codigo_cc_omie", departamento: "t.codigo_departamento" })}
      ORDER BY
        CASE WHEN t.status IN ('ATRASADO') THEN 0
             WHEN t.status IN ('VENCEHOJE','AVENCER','EMABERTO','PAGTO_PARCIAL') THEN 1
             ELSE 2 END,
        t.data_vencimento ASC NULLS LAST
-     LIMIT $2`,
-    [natureza, limit]
+     LIMIT ${lim}`,
+    b.values
   );
   return rows.map((r) => ({
     codigo_titulo_omie: String(r.codigo_titulo_omie),
@@ -217,7 +222,8 @@ export async function getFluxoPorCategoria() {
   );
 }
 
-export async function getContas() {
+export async function getContas(filter?: DimFilter) {
+  const b = new Binder();
   return query<{
     codigo_cc_omie: string;
     descricao: string;
@@ -239,11 +245,15 @@ export async function getContas() {
        LIMIT 1
      ) s ON true
      WHERE cc.inativa <> 'S'
-     ORDER BY cc.descricao`
+       ${dimSql(b, filter, { conta: "cc.codigo_cc_omie" })}
+     ORDER BY cc.descricao`,
+    b.values
   );
 }
 
-export async function getExtrato(limit = 120) {
+export async function getExtrato(limit = 120, filter?: DimFilter) {
+  const b = new Binder();
+  const lim = b.add(limit);
   return query<{
     data_lancamento: string;
     descricao: string;
@@ -259,9 +269,10 @@ export async function getExtrato(limit = 120) {
      FROM fato.extrato_movimento e
      JOIN dim.conta_corrente cc ON cc.app_key=e.app_key AND cc.codigo_cc_omie=e.codigo_cc_omie
      WHERE e.codigo_lancamento IS NOT NULL AND e.codigo_lancamento <> 0
+       ${dimSql(b, filter, { cliente: "e.codigo_cliente_omie", categoria: "e.codigo_categoria", conta: "e.codigo_cc_omie" })}
      ORDER BY e.data_lancamento DESC, e.id DESC
-     LIMIT $1`,
-    [limit]
+     LIMIT ${lim}`,
+    b.values
   );
 }
 
@@ -291,13 +302,16 @@ export async function getSyncHealth() {
   return { logs, rec, counts: counts[0] ?? {} };
 }
 
-export async function getStatusBreakdown(natureza: "R" | "P") {
+export async function getStatusBreakdown(natureza: "R" | "P", filter?: DimFilter) {
+  const b = new Binder();
+  const nat = b.add(natureza);
   return query<{ status: string; qtd: number; valor: number }>(
     `SELECT status::text, COUNT(*)::int AS qtd, COALESCE(SUM(valor_aberto),0)::float AS valor
-     FROM fato.titulo
-     WHERE natureza=$1
+     FROM fato.titulo t
+     WHERE natureza=${nat}
+       ${dimSql(b, filter, { cliente: "t.codigo_cliente_omie", categoria: "t.codigo_categoria", conta: "t.codigo_cc_omie", departamento: "t.codigo_departamento" })}
      GROUP BY status
      ORDER BY valor DESC`,
-    [natureza]
+    b.values
   );
 }
