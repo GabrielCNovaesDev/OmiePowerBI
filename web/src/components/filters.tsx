@@ -9,6 +9,8 @@ export type FilterOptions = {
   contas: FilterOption[];
   clientes: FilterOption[];
   departamentos: FilterOption[];
+  empresas?: FilterOption[];
+  canPickEmpresa?: boolean;
 };
 
 function Select({
@@ -62,6 +64,7 @@ export function FilterRail({ options }: { options?: FilterOptions | null }) {
   const pathname = usePathname();
   const periodo = params.get("periodo") ?? "ano_corrente";
   const base = params.get("base") ?? "caixa";
+  const empresa = params.get("empresa") ?? "todas";
   const cliente = params.get("cliente") ?? "todos";
   const categoria = params.get("categoria") ?? "todos";
   const conta = params.get("conta") ?? "todos";
@@ -83,6 +86,17 @@ export function FilterRail({ options }: { options?: FilterOptions | null }) {
     <div className="space-y-3">
       <p className="px-1 text-[10px] uppercase tracking-[0.16em] text-white/40">Filtros</p>
       <Select label="Período" name="periodo" value={periodo} options={PERIODO_OPTIONS} />
+      {options?.canPickEmpresa && (options.empresas?.length ?? 0) > 0 ? (
+        <Select
+          label="Empresa"
+          name="empresa"
+          value={empresa}
+          options={[
+            { value: "todas", label: "Todas as empresas" },
+            ...(options.empresas ?? []).map((e) => ({ value: e.codigo, label: e.descricao })),
+          ]}
+        />
+      ) : null}
       <Select
         label="Analisar"
         name="base"

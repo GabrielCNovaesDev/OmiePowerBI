@@ -1,9 +1,28 @@
 "use strict";
 
+const { AsyncLocalStorage } = require("node:async_hooks");
 const { sleep } = require("../lib/util");
 
 const BASE_DELAY_MS = 280;
 const MAX_RETRIES = 4;
+const omieStore = new AsyncLocalStorage();
+
+function withOmieCreds(creds, fn) {
+  return omieStore.run(creds, fn);
+}
+
+function currentCreds() {
+  const stored = omieStore.getStore();
+  if (stored && stored.app_key && stored.app_secret) return stored;
+  const env = {
+    app_key: process.env.OMIE_APP_KEY,
+    app_secret: process.env.OMIE_APP_SECRET,
+  };
+  if (!env.app_key || !env.app_secret) {
+    throw new OmieError("Credenciais Omie ausentes", {});
+  }
+  return env;
+}
 
 class OmieError extends Error {
   constructor(message, details) {
@@ -14,11 +33,12 @@ class OmieError extends Error {
 }
 
 function buildBody(call, param) {
+  const creds = currentCreds();
   return {
     call,
     param: [param || {}],
-    app_key: process.env.OMIE_APP_KEY,
-    app_secret: process.env.OMIE_APP_SECRET,
+    app_key: creds.app_key,
+    app_secret: creds.app_secret,
   };
 }
 
@@ -162,4 +182,6 @@ module.exports = {
   paginationMeta,
   extractRecords,
   paginate,
+  withOmieCreds,
+  currentCreds,
 };

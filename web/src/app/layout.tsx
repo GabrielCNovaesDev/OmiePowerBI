@@ -1,11 +1,15 @@
 import type { Metadata } from "next";
 import { Geist, Montserrat } from "next/font/google";
 import { Suspense } from "react";
+import { headers } from "next/headers";
+import { AdminShell } from "@/components/admin-ui";
 import { Shell } from "@/components/shell";
 import { formatDateTime } from "@/lib/format";
-import { getEmpresa } from "@/lib/queries";
 import { getFilterOptions } from "@/lib/dash";
 import { query } from "@/lib/db";
+import { auth } from "@/auth";
+import { empresaFromHeaders, resolveTenant, tenantLabel } from "@/lib/tenant";
+import { Binder, dimSql } from "@/lib/params";
 import "./globals.css";
 
 const geist = Geist({
@@ -27,29 +31,85 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const session = await auth();
+  const bodyClass = `${geist.variable} ${brand.variable} font-sans antialiased`;
+
+  if (!session?.user) {
+    return (
+      <html lang="pt-BR">
+        <body className={bodyClass}>{children}</body>
+      </html>
+    );
+  }
+
+  const headerList = await headers();
+  let pathname = "";
+  try {
+    pathname = new URL(headerList.get("x-url") || "http://local.invalid/").pathname;
+  } catch {
+    pathname = "";
+  }
+  const isAdminPath = pathname.startsWith("/admin");
+
   let company: string | null = null;
   let lastSync: string | null = null;
   let filterOptions = null;
+  let tenantName = session.user.name || session.user.email || "";
+  let papel = session.user.papel;
+
+  if (isAdminPath) {
+    return (
+      <html lang="pt-BR">
+        <body className={bodyClass}>
+          <AdminShell userName={tenantName} papel={papel} pathname={pathname}>
+            {children}
+          </AdminShell>
+        </body>
+      </html>
+    );
+  }
+
   try {
-    const empresa = await getEmpresa();
-    company = empresa?.nome_fantasia || empresa?.razao_social || null;
+    const tenant = await resolveTenant(session, empresaFromHeaders(headerList.get("x-url")));
+    tenantName = tenant.nome;
+    papel = tenant.papel;
+    company = tenantLabel(tenant);
+    const filter = { appKeys: tenant.selectedKeys };
+    const b = new Binder();
     const rows = await query<{ ts: string; status: string; metodo: string }>(
       `SELECT COALESCE(finished_at, started_at)::text AS ts, status::text, metodo
-       FROM ops.sync_log ORDER BY started_at DESC LIMIT 1`
+       FROM ops.sync_log
+       WHERE TRUE ${dimSql(b, filter, { appKey: "app_key" })}
+       ORDER BY started_at DESC LIMIT 1`,
+      b.values
     );
     const last = rows[0];
     if (last?.status === "running") lastSync = `Carga em andamento (${last.metodo})`;
     else if (last?.ts) lastSync = formatDateTime(last.ts);
-    filterOptions = await getFilterOptions();
+    const dims = await getFilterOptions(filter);
+    filterOptions = {
+      ...dims,
+      empresas: tenant.empresas.map((e) => ({
+        codigo: e.app_key,
+        descricao: e.apelido || e.razao_social || e.app_key,
+      })),
+      canPickEmpresa: tenant.canPickEmpresa,
+    };
   } catch {
     company = company || "Banco ainda não conectado";
   }
 
   return (
     <html lang="pt-BR">
-      <body className={`${geist.variable} ${brand.variable} font-sans antialiased`}>
+      <body className={bodyClass}>
         <Suspense fallback={null}>
-          <Shell company={company} lastSync={lastSync} filterOptions={filterOptions}>
+          <Shell
+            company={company}
+            lastSync={lastSync}
+            filterOptions={filterOptions}
+            userName={tenantName}
+            papel={papel}
+          >
             {children}
           </Shell>
         </Suspense>

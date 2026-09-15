@@ -1,17 +1,22 @@
 import { BrandMark } from "./brand";
 import { DashTabs, ReportNav } from "./nav";
 import { FilterRail, type FilterOptions } from "./filters";
+import { SessionMenu } from "./session-menu";
 
 export function Shell({
   children,
   company,
   lastSync,
   filterOptions,
+  userName,
+  papel,
 }: {
   children: React.ReactNode;
   company?: string | null;
   lastSync?: string | null;
   filterOptions?: FilterOptions | null;
+  userName?: string | null;
+  papel?: string | null;
 }) {
   return (
     <div className="min-h-screen bg-bg">
@@ -25,6 +30,7 @@ export function Shell({
         <div className="text-right text-[11px] text-white/60">
           <p className="text-white/80">{company || "Omie"}</p>
           <p>{lastSync ? `Atualizado ${lastSync}` : "Aguardando primeira carga"}</p>
+          {userName ? <SessionMenu name={userName} papel={papel || ""} showAdmin={papel === "admin"} /> : null}
         </div>
       </header>
       <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr]">

@@ -815,4 +815,56 @@ GROUP BY b.app_key, b.data_baixa, b.natureza;
 COMMENT ON VIEW fato.vw_fluxo_caixa_realizado IS 'Fluxo realizado: baixas agregadas por dia e natureza.';
 
 
+-- =============================================================================
+--  P L A T A F O R M A  (auth + cadastro de aplicativos)
+-- =============================================================================
+
+CREATE SCHEMA IF NOT EXISTS auth;
+
+DO $$ BEGIN
+    CREATE TYPE auth.papel AS ENUM ('admin', 'interno', 'cliente');
+EXCEPTION
+    WHEN duplicate_object THEN NULL;
+END $$;
+
+CREATE TABLE ops.aplicativo (
+    id                      BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    apelido                 VARCHAR(80)   NOT NULL,
+    razao_social_cache      VARCHAR(120),
+    app_key                 VARCHAR(40)   NOT NULL UNIQUE,
+    app_secret_encrypted    TEXT          NOT NULL,
+    ativo                   BOOLEAN       NOT NULL DEFAULT TRUE,
+    sync_habilitado         BOOLEAN       NOT NULL DEFAULT TRUE,
+    ultima_sync_at          TIMESTAMPTZ,
+    ultima_sync_status      public.sync_status,
+    created_at              TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    updated_at              TIMESTAMPTZ   NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE auth.usuario (
+    id                  BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    nome                VARCHAR(120)  NOT NULL,
+    email               VARCHAR(200)  NOT NULL UNIQUE,
+    senha_hash          VARCHAR(200)  NOT NULL,
+    papel               auth.papel    NOT NULL DEFAULT 'cliente',
+    ativo               BOOLEAN       NOT NULL DEFAULT TRUE,
+    deve_trocar_senha   BOOLEAN       NOT NULL DEFAULT FALSE,
+    created_at          TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
+    last_login_at       TIMESTAMPTZ
+);
+
+CREATE TABLE auth.usuario_aplicativo (
+    usuario_id      BIGINT NOT NULL REFERENCES auth.usuario(id) ON DELETE CASCADE,
+    aplicativo_id   BIGINT NOT NULL REFERENCES ops.aplicativo(id) ON DELETE CASCADE,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (usuario_id, aplicativo_id)
+);
+
+CREATE INDEX idx_aplicativo_ativo ON ops.aplicativo (ativo) WHERE ativo;
+CREATE INDEX idx_usuario_aplicativo_app ON auth.usuario_aplicativo (aplicativo_id);
+
+CREATE TRIGGER trg_aplicativo_updated_at
+    BEFORE UPDATE ON ops.aplicativo
+    FOR EACH ROW EXECUTE FUNCTION public.trg_set_updated_at();
+
 COMMIT;

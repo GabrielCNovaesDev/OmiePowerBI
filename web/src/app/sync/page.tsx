@@ -2,9 +2,15 @@ import { PageHeader } from "@/components/shell";
 import { DataTable, Kpi } from "@/components/ui";
 import { formatDateTime, money, n } from "@/lib/format";
 import { getSyncHealth } from "@/lib/queries";
+import { readParams } from "@/lib/params";
 
-export default async function SyncPage() {
-  const { logs, rec, counts } = await getSyncHealth();
+export default async function SyncPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const { filter } = await readParams(searchParams);
+  const { logs, rec, counts } = await getSyncHealth(filter);
   const divergencias = rec.filter((r) => r.toleravel === false);
 
   return (

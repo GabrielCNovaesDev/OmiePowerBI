@@ -1,14 +1,15 @@
 "use strict";
 
-const { omieCall, paginate, extractRecords, paginationMeta } = require("../omie/client");
+const { omieCall, paginate, extractRecords, paginationMeta, withOmieCreds, currentCreds } = require("../omie/client");
 const { CATALOG } = require("../omie/catalog");
 const { query, withClient } = require("../db/pool");
 const { todayBr, monthWindows, num, str, parseOmieDate } = require("../lib/util");
+const { listAplicativos, resolveOmieCreds, markSync } = require("../lib/aplicativos");
 const m = require("./mappers");
 const s = require("./sql");
 
 function appKey() {
-  return process.env.OMIE_APP_KEY;
+  return currentCreds().app_key;
 }
 
 async function startLog(endpoint, metodo, tipo) {
@@ -490,7 +491,7 @@ async function reconcile() {
   return results;
 }
 
-async function loadFull() {
+async function runLoadSteps() {
   const report = {};
   const steps = [
     ["empresas", syncEmpresas],
@@ -528,8 +529,54 @@ async function loadFull() {
   return report;
 }
 
+function loadHasError(report) {
+  return Object.values(report).some((item) => item && typeof item === "object" && item.ok === false);
+}
+
+async function loadFull(appKeyArg) {
+  const creds = await resolveOmieCreds(appKeyArg);
+  console.log(`\n=== LOAD ${creds.app_key} ===`);
+  const report = await withOmieCreds(creds, () => runLoadSteps());
+  const status = loadHasError(report) ? "error" : "success";
+  try {
+    await markSync(creds.app_key, status);
+  } catch (err) {
+    console.warn("nao foi possivel atualizar ops.aplicativo:", err.message);
+  }
+  return report;
+}
+
+async function loadAll() {
+  const apps = await listAplicativos({ onlySyncable: true, onlyAtivos: true });
+  let keys = apps.map((a) => a.app_key);
+  if (!keys.length && process.env.OMIE_APP_KEY) {
+    keys = [process.env.OMIE_APP_KEY];
+  }
+  if (!keys.length) {
+    throw new Error("Nenhum aplicativo Omie ativo para sincronizar");
+  }
+  const out = [];
+  for (const key of keys) {
+    console.log(`\n######## aplicativo ${key} ########`);
+    try {
+      const report = await loadFull(key);
+      out.push({ app_key: key, ok: !loadHasError(report), report });
+    } catch (err) {
+      console.error(`LOAD FAILED ${key}`, err.message);
+      try {
+        await markSync(key, "error");
+      } catch {
+        /* ignore */
+      }
+      out.push({ app_key: key, ok: false, error: err.message });
+    }
+  }
+  return out;
+}
+
 module.exports = {
   loadFull,
+  loadAll,
   syncEmpresas,
   syncBancos,
   syncContasCorrentes,

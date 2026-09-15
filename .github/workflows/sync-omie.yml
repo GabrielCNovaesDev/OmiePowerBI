@@ -1,0 +1,34 @@
+name: Sync Omie
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      app_key:
+        description: "App Key Omie (vazio = todas as empresas ativas)"
+        required: false
+        default: ""
+
+jobs:
+  load:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - name: Carga Omie
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          APP_ENCRYPTION_KEY: ${{ secrets.APP_ENCRYPTION_KEY }}
+        run: |
+          KEY="${{ github.event.inputs.app_key }}"
+          if [ -n "$KEY" ]; then
+            node scripts/load-full.js "$KEY"
+          else
+            npm run load:all
+          fi

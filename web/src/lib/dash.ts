@@ -49,6 +49,7 @@ function monthLabel(ym: string): string {
 
 function tituloCols() {
   return {
+    appKey: "t.app_key",
     cliente: "t.codigo_cliente_omie",
     categoria: "t.codigo_categoria",
     conta: "t.codigo_cc_omie",
@@ -71,7 +72,7 @@ export async function getSaldoAtual(filter?: DimFilter) {
       LIMIT 1
     ) s ON true
     WHERE COALESCE(cc.inativa,'N') <> 'S'
-      ${dimSql(b, filter, { conta: "cc.codigo_cc_omie" })}
+      ${dimSql(b, filter, { appKey: "cc.app_key", conta: "cc.codigo_cc_omie" })}
   `, b.values);
   const r = rows[0] ?? {};
   return { saldo: n(r.saldo), previsto: n(r.previsto), limite: n(r.limite) };
@@ -92,7 +93,7 @@ export async function getSaldoPorConta(filter?: DimFilter) {
        ORDER BY data_referencia DESC LIMIT 1
      ) s ON true
      WHERE COALESCE(cc.inativa,'N') <> 'S'
-       ${dimSql(b, filter, { conta: "cc.codigo_cc_omie" })}
+       ${dimSql(b, filter, { appKey: "cc.app_key", conta: "cc.codigo_cc_omie" })}
      ORDER BY cc.descricao`,
     b.values
   );
@@ -109,7 +110,7 @@ export async function getSaldoEvolucaoMensal(from: string, to: string, filter?: 
      FROM fato.saldo_conta_corrente s
      JOIN dim.conta_corrente cc ON cc.app_key=s.app_key AND cc.codigo_cc_omie=s.codigo_cc_omie
      WHERE s.data_referencia BETWEEN ${fromP}::date AND ${toP}::date
-       ${dimSql(b, filter, { conta: "cc.codigo_cc_omie" })}
+       ${dimSql(b, filter, { appKey: "cc.app_key", conta: "cc.codigo_cc_omie" })}
      GROUP BY 1, 2
      ORDER BY 1, 2`,
     b.values
@@ -179,13 +180,14 @@ export async function getFluxoMensalCaixa(from: string, to: string, filter?: Dim
        ORDER BY data_referencia DESC LIMIT 1
      ) s ON true
      WHERE COALESCE(cc.inativa,'N') <> 'S'
-       ${dimSql(openB, filter, { conta: "cc.codigo_cc_omie" })}`,
+       ${dimSql(openB, filter, { appKey: "cc.app_key", conta: "cc.codigo_cc_omie" })}`,
     openB.values
   );
   const b = new Binder();
   const fromP = b.add(from);
   const toP = b.add(to);
   const extratoDims = dimSql(b, filter, {
+    appKey: "e.app_key",
     cliente: "e.codigo_cliente_omie",
     categoria: "e.codigo_categoria",
     conta: "e.codigo_cc_omie",
@@ -265,7 +267,7 @@ export async function getFluxoDiarioMes(from: string, to: string, filter?: DimFi
      FROM fato.extrato_movimento e
      WHERE e.data_lancamento BETWEEN ${aFrom}::date AND ${aTo}::date
        AND COALESCE(e.codigo_lancamento,0) <> 0
-       ${dimSql(a, filter, { cliente: "e.codigo_cliente_omie", categoria: "e.codigo_categoria", conta: "e.codigo_cc_omie" })}
+       ${dimSql(a, filter, { appKey: "e.app_key", cliente: "e.codigo_cliente_omie", categoria: "e.codigo_categoria", conta: "e.codigo_cc_omie" })}
      GROUP BY 1
      ORDER BY 1`,
     a.values
@@ -536,7 +538,7 @@ export async function getOrcamentoMensal(year?: number, filter?: DimFilter) {
      FROM fato.orcamento_caixa o
      LEFT JOIN dim.categoria c ON c.app_key=o.app_key AND c.codigo=o.codigo_categoria
      WHERE o.ano=${yearP}
-       ${dimSql(b, filter, { categoria: "o.codigo_categoria" })}
+       ${dimSql(b, filter, { appKey: "o.app_key", categoria: "o.codigo_categoria" })}
      GROUP BY 1, 4
      ORDER BY 1`,
     b.values
@@ -615,19 +617,25 @@ export async function getCheckPanel(from: string, to: string, filter?: DimFilter
        ${extra}`,
     bind.values
   );
+  const dreB = new Binder();
   const dre = await query<Record<string, unknown>>(
     `SELECT COUNT(*)::int AS qtd
      FROM dim.categoria c
      WHERE (c.codigo_dre IS NULL OR c.codigo_dre='')
-       AND COALESCE(c.conta_inativa,'N')<>'S'`
+       AND COALESCE(c.conta_inativa,'N')<>'S'
+       ${dimSql(dreB, filter, { appKey: "c.app_key" })}`,
+    dreB.values
   );
+  const rateioB = new Binder();
   const rateio = await query<Record<string, unknown>>(
     `SELECT COUNT(*)::int AS qtd FROM (
         SELECT r.app_key, r.codigo_titulo_omie
         FROM fato.titulo_rateio_categoria r
+        WHERE TRUE ${dimSql(rateioB, filter, { appKey: "r.app_key" })}
         GROUP BY 1,2
         HAVING ABS(SUM(r.percentual)-100) > 0.5
-     ) x`
+     ) x`,
+    rateioB.values
   );
   const b = blank[0] ?? {};
   const items: CheckItem[] = [
@@ -764,19 +772,39 @@ export async function getNfs(from: string, to: string, filter?: DimFilter) {
   );
 }
 
-export async function getFilterOptions() {
+export async function getFilterOptions(filter?: DimFilter) {
+  const b1 = new Binder();
+  const b2 = new Binder();
+  const b3 = new Binder();
+  const b4 = new Binder();
   const [categorias, contas, clientes, departamentos] = await Promise.all([
     query<{ codigo: string; descricao: string }>(
-      `SELECT codigo, descricao FROM dim.categoria WHERE COALESCE(conta_inativa,'N')<>'S' ORDER BY descricao LIMIT 400`
+      `SELECT codigo, descricao FROM dim.categoria
+       WHERE COALESCE(conta_inativa,'N')<>'S'
+         ${dimSql(b1, filter, { appKey: "app_key" })}
+       ORDER BY descricao LIMIT 400`,
+      b1.values
     ),
     query<{ codigo: string; descricao: string }>(
-      `SELECT codigo_cc_omie::text AS codigo, descricao FROM dim.conta_corrente WHERE COALESCE(inativa,'N')<>'S' ORDER BY descricao`
+      `SELECT codigo_cc_omie::text AS codigo, descricao FROM dim.conta_corrente
+       WHERE COALESCE(inativa,'N')<>'S'
+         ${dimSql(b2, filter, { appKey: "app_key" })}
+       ORDER BY descricao`,
+      b2.values
     ),
     query<{ codigo: string; descricao: string }>(
-      `SELECT codigo_cliente_omie::text AS codigo, razao_social AS descricao FROM dim.cliente WHERE COALESCE(inativo,'N')<>'S' ORDER BY razao_social LIMIT 400`
+      `SELECT codigo_cliente_omie::text AS codigo, razao_social AS descricao FROM dim.cliente
+       WHERE COALESCE(inativo,'N')<>'S'
+         ${dimSql(b3, filter, { appKey: "app_key" })}
+       ORDER BY razao_social LIMIT 400`,
+      b3.values
     ),
     query<{ codigo: string; descricao: string }>(
-      `SELECT codigo, descricao FROM dim.departamento WHERE COALESCE(inativo,'N')<>'S' ORDER BY descricao LIMIT 200`
+      `SELECT codigo, descricao FROM dim.departamento
+       WHERE COALESCE(inativo,'N')<>'S'
+         ${dimSql(b4, filter, { appKey: "app_key" })}
+       ORDER BY descricao LIMIT 200`,
+      b4.values
     ),
   ]);
   return { categorias, contas, clientes, departamentos };

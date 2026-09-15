@@ -1,8 +1,13 @@
 require("dotenv").config();
-const { loadFull } = require("../src/etl/sync");
+const { loadFull, loadAll } = require("../src/etl/sync");
 const { getPool } = require("../src/db/pool");
 
-loadFull()
+const arg = process.argv[2];
+const runAll = arg === "all" || arg === "--all";
+
+const job = runAll ? loadAll() : loadFull(arg || undefined);
+
+job
   .then((report) => {
     console.log("\n=== LOAD COMPLETE ===");
     console.log(JSON.stringify(report, null, 2));
