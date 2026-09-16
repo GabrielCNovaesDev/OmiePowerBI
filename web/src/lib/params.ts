@@ -2,6 +2,7 @@ import { resolvePeriod, type PeriodBounds } from "./period";
 import { auth } from "@/auth";
 import { resolveTenant, type Tenant } from "./tenant";
 import { oneParam } from "./params-shared";
+import { redirect } from "next/navigation";
 
 export type { DimFilter } from "./params-shared";
 export {
@@ -30,7 +31,7 @@ export async function readParams(
   const rawView = sp.view;
   const session = await auth();
   if (!session?.user) {
-    throw new Error("Sessao ausente");
+    redirect("/login");
   }
   const tenant = await resolveTenant(session, oneParam(sp, "empresa"));
   return {
