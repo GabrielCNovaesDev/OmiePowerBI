@@ -7,6 +7,7 @@ loadEnv({ path: resolve(__dirname, "..", ".env") });
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   outputFileTracingRoot: resolve(__dirname),
+  serverExternalPackages: ["pg"],
 };
 
 export default nextConfig;

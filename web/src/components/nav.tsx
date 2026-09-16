@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/format";
-import { globalQuery } from "@/lib/params";
+import { globalQuery } from "@/lib/params-shared";
 
 export const DASHBOARDS = [
   { href: "/", label: "Resumo" },
