@@ -40,5 +40,16 @@ export const authConfig = {
       }
       return session;
     },
+    redirect({ url, baseUrl }) {
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      try {
+        const next = new URL(url);
+        const base = new URL(baseUrl);
+        if (next.origin === base.origin) return url;
+      } catch {
+        /* ignore */
+      }
+      return baseUrl;
+    },
   },
 } satisfies NextAuthConfig;

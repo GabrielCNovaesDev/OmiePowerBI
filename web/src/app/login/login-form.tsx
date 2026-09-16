@@ -4,13 +4,25 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 
+function safeNextPath(raw: string | null | undefined): string {
+  const fallback = "/";
+  if (!raw) return fallback;
+  try {
+    const next = new URL(raw, window.location.origin);
+    if (next.origin !== window.location.origin) return fallback;
+    return `${next.pathname}${next.search}` || fallback;
+  } catch {
+    return raw.startsWith("/") ? raw : fallback;
+  }
+}
+
 export function LoginForm() {
   const params = useSearchParams();
   const [error, setError] = useState<string | null>(
     params.get("error") ? "Não foi possível entrar. Verifique e-mail e senha." : null
   );
   const [pending, setPending] = useState(false);
-  const callbackUrl = params.get("callbackUrl") || "/";
+  const callbackUrl = safeNextPath(params.get("callbackUrl") || "/");
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -30,7 +42,7 @@ export function LoginForm() {
       setError("E-mail ou senha inválidos, ou usuário inativo.");
       return;
     }
-    window.location.assign(result?.url || callbackUrl);
+    window.location.assign(safeNextPath(result?.url || callbackUrl));
   }
 
   return (
