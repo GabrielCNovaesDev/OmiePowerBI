@@ -72,7 +72,7 @@ export async function resolveTenant(session: Session, empresaParam?: string | nu
   }
 
   const allowedKeys = empresas.map((e) => e.app_key);
-  const canPickEmpresa = isStaff(papel) && allowedKeys.length > 0;
+  const canPickEmpresa = allowedKeys.length > 1;
   let selectedKeys = allowedKeys;
 
   if (empresaParam && empresaParam !== "todas" && allowedKeys.includes(empresaParam)) {

@@ -1,4 +1,5 @@
 import { BrandMark } from "./brand";
+import { EmpresaPicker } from "./empresa-picker";
 import { DashTabs, ReportNav } from "./nav";
 import { FilterRail, type FilterOptions } from "./filters";
 import { SessionMenu } from "./session-menu";
@@ -27,8 +28,12 @@ export function Shell({
         <div className="min-w-0 flex-1">
           <DashTabs />
         </div>
-        <div className="text-right text-[11px] text-white/60">
-          <p className="text-white/80">{company || "Omie"}</p>
+        <div className="ml-auto text-right text-[11px] text-white/60">
+          <EmpresaPicker
+            empresas={filterOptions?.empresas ?? []}
+            canPick={Boolean(filterOptions?.canPickEmpresa)}
+            fallbackLabel={company}
+          />
           <p>{lastSync ? `Atualizado ${lastSync}` : "Aguardando primeira carga"}</p>
           {userName ? <SessionMenu name={userName} papel={papel || ""} showAdmin={papel === "admin"} /> : null}
         </div>
