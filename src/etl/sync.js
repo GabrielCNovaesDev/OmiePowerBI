@@ -8,6 +8,15 @@ const { listAplicativos, resolveOmieCreds, markSync } = require("../lib/aplicati
 const m = require("./mappers");
 const s = require("./sql");
 
+async function ensureContaVisivelColumns() {
+  try {
+    await query(`ALTER TABLE dim.conta_corrente ADD COLUMN IF NOT EXISTS visivel_fluxo_caixa VARCHAR(1) DEFAULT 'S'`);
+    await query(`ALTER TABLE dim.conta_corrente ADD COLUMN IF NOT EXISTS visivel_resumo VARCHAR(1) DEFAULT 'S'`);
+  } catch (err) {
+    console.warn("ensure visivel columns:", err instanceof Error ? err.message : err);
+  }
+}
+
 function appKey() {
   return currentCreds().app_key;
 }
@@ -534,6 +543,7 @@ function loadHasError(report) {
 }
 
 async function loadFull(appKeyArg) {
+  await ensureContaVisivelColumns();
   const creds = await resolveOmieCreds(appKeyArg);
   console.log(`\n=== LOAD ${creds.app_key} ===`);
   const report = await withOmieCreds(creds, () => runLoadSteps());

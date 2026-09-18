@@ -78,8 +78,8 @@ function mapBanco(row) {
 
 function mapContaCorrente(row, appKey) {
   const tipo = pick(row, "tipo_conta_corrente", "cCodTipo", "tipo");
-  const naoFluxo = flag(pick(row, "nao_fluxo"), "N");
-  const naoResumo = flag(pick(row, "nao_resumo"), "N");
+  const naoFluxo = flag(pick(row, "nao_fluxo", "naoFluxo", "cNaoFluxo"), "N");
+  const naoResumo = flag(pick(row, "nao_resumo", "naoResumo", "cNaoResumo"), "N");
   return {
     app_key: appKey,
     codigo_cc_omie: num(pick(row, "nCodCC", "codigo", "codigo_conta_corrente"), 0),
