@@ -1,7 +1,8 @@
-import { ComboCashflow, DonutChart, HBarChart, Spark, Waterfall } from "@/components/charts";
+import { AgingBlock } from "@/components/aging-block";
+import { ComboCashflow, HBarChart, Spark, Waterfall } from "@/components/charts";
 import { PageHeader } from "@/components/shell";
 import { Card, DataTable, Kpi, Signed } from "@/components/ui";
-import { compactMoney, money } from "@/lib/format";
+import { money } from "@/lib/format";
 import {
   getAgingBi,
   getAgingByDim,
@@ -156,14 +157,18 @@ export default async function MensalPage({
             />
           </Card>
         </div>
-        <Trio title="Receitas atrasadas" total={totAtrasoR} aging={atrasadoR} cat={recAtrasoCat} pes={recAtrasoCli} color="#e07a3a" />
-        <Trio title="Receitas a vencer" total={totVencerR} aging={vencerR} cat={recVencerCat} pes={recVencerCli} color="#4ea3d9" />
+        <div className="mb-4">
+          <AgingBlock title="Receitas atrasadas" total={totAtrasoR} aging={atrasadoR} categorias={recAtrasoCat} pessoas={recAtrasoCli} color="#e07a3a" banner={false} />
+        </div>
+        <AgingBlock title="Receitas a vencer" total={totVencerR} aging={vencerR} categorias={recVencerCat} pessoas={recVencerCli} color="#4ea3d9" banner={false} />
       </section>
 
       <section>
         <div className="mb-3 rounded bg-cyan px-4 py-2 text-sm font-semibold text-white">4. Contas a pagar</div>
-        <Trio title="Gastos atrasados" total={totAtrasoP} aging={atrasadoP} cat={pagAtrasoCat} pes={pagAtrasoCli} color="#e07a3a" />
-        <Trio title="Gastos a vencer" total={totVencerP} aging={vencerP} cat={pagVencerCat} pes={pagVencerCli} color="#e06a6a" />
+        <div className="mb-4">
+          <AgingBlock title="Gastos atrasados" total={totAtrasoP} aging={atrasadoP} categorias={pagAtrasoCat} pessoas={pagAtrasoCli} color="#e07a3a" pessoaLabel="Por fornecedor" banner={false} />
+        </div>
+        <AgingBlock title="Gastos a vencer" total={totVencerP} aging={vencerP} categorias={pagVencerCat} pessoas={pagVencerCli} color="#e06a6a" pessoaLabel="Por fornecedor" banner={false} />
       </section>
     </div>
   );
@@ -172,37 +177,4 @@ export default async function MensalPage({
 function pct(part: number, total: number) {
   if (!total) return "—";
   return `${((part / total) * 100).toFixed(1)}%`;
-}
-
-function Trio({
-  title,
-  total,
-  aging,
-  cat,
-  pes,
-  color,
-}: {
-  title: string;
-  total: number;
-  aging: Array<{ faixa: string; valor: number }>;
-  cat: Array<{ nome: string; valor: number }>;
-  pes: Array<{ nome: string; valor: number }>;
-  color: string;
-}) {
-  return (
-    <div className="mb-4">
-      <p className="mb-2 text-sm font-medium">{title}</p>
-      <div className="grid gap-4 xl:grid-cols-3">
-        <Card>
-          <DonutChart data={aging.map((a) => ({ name: a.faixa, value: Number(a.valor) }))} center={compactMoney(total)} colors={[color, "#f0b429", "#c05621"]} />
-        </Card>
-        <Card>
-          <HBarChart data={cat.map((c) => ({ name: c.nome, value: Number(c.valor) }))} color={color} />
-        </Card>
-        <Card>
-          <HBarChart data={pes.map((c) => ({ name: c.nome, value: Number(c.valor) }))} color={color} />
-        </Card>
-      </div>
-    </div>
-  );
 }

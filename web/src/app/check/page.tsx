@@ -1,10 +1,10 @@
+import { ScatterOutliers } from "@/components/charts";
 import { PageHeader } from "@/components/shell";
-import { Card, DataTable, Dot, Standby } from "@/components/ui";
-import { money } from "@/lib/format";
-import { getBlankDocs, getCheckPanel, getSaldoAtual, getSaldoPorConta } from "@/lib/dash";
+import { Card, DataTable, Dot, Kpi, Standby } from "@/components/ui";
+import { cn, formatDate, money } from "@/lib/format";
+import { getAnaliseDesvios, getBlankDocs, getCheckPanel, getSaldoAtual, getSaldoPorConta } from "@/lib/dash";
 import { getResumo } from "@/lib/queries";
 import { hrefWith, readParams, type DimFilter } from "@/lib/params";
-import { cn } from "@/lib/format";
 import Link from "next/link";
 
 const TABS = [
@@ -89,7 +89,7 @@ export default async function CheckPage({
       ) : null}
 
       {tab === "outliers" ? (
-        <Standby title="Análise de desvios (outliers)" reason="O print mostra o scatter por categoria, mas não o critério estatístico. Fica em standby até fecharmos a regra (z-score / IQR)." />
+        <OutliersTab periodFrom={period.from} periodTo={period.to} filter={filter} raw={raw} />
       ) : null}
     </div>
   );
@@ -134,6 +134,94 @@ async function BlankTab({
       <DataTable
         headers={["CNPJ", "NF", "Num. doc.", "Cliente", "Categoria", "Observação", "Valor"]}
         rows={rows.map((r) => [r.cnpj || "—", r.nf || "—", r.numero || "—", r.cliente || "—", r.categoria || "—", r.obs || "—", money(r.valor)])}
+      />
+    </div>
+  );
+}
+
+async function OutliersTab({
+  periodFrom,
+  periodTo,
+  filter,
+  raw,
+}: {
+  periodFrom: string;
+  periodTo: string;
+  filter?: DimFilter;
+  raw: Record<string, string | string[] | undefined>;
+}) {
+  const regraRaw = Array.isArray(raw.regra) ? raw.regra[0] : raw.regra;
+  const metodo = regraRaw === "z" ? "z" : "iqr";
+  const natRaw = Array.isArray(raw.nat) ? raw.nat[0] : raw.nat;
+  const natureza = natRaw === "R" || natRaw === "P" ? natRaw : undefined;
+  const data = await getAnaliseDesvios(periodFrom, periodTo, filter, metodo, natureza);
+  const regras = [
+    { id: "iqr", label: "IQR (Tukey 1,5)" },
+    { id: "z", label: "Z-score (|z| ≥ 2,5)" },
+  ];
+  const nats = [
+    { id: undefined, label: "Todas" },
+    { id: "R", label: "A receber" },
+    { id: "P", label: "A pagar" },
+  ] as const;
+  return (
+    <div className="space-y-4">
+      <Card>
+        <p className="text-sm text-mist">
+          Cada ponto é um título no período. A regra vale <strong>dentro da categoria</strong>, só em grupos com pelo menos 8 documentos.
+          {metodo === "iqr"
+            ? " IQR: desvio se o valor sai de Q1 − 1,5×IQR ou Q3 + 1,5×IQR. Melhor padrão para valores financeiros assimétricos."
+            : " Z-score: desvio se o valor dista 2,5 desvios-padrão da média da categoria. Mais sensível a um único título grande."}
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {regras.map((r) => (
+            <Link
+              key={r.id}
+              href={hrefWith(raw, "/check", { tab: "outliers", regra: r.id })}
+              className={cn("rounded-full border px-3 py-1 text-sm", metodo === r.id ? "border-cyan bg-cyan text-white" : "border-line bg-card")}
+            >
+              {r.label}
+            </Link>
+          ))}
+        </div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {nats.map((n) => (
+            <Link
+              key={n.label}
+              href={hrefWith(raw, "/check", { tab: "outliers", nat: n.id })}
+              className={cn(
+                "rounded-full border px-3 py-1 text-sm",
+                (natureza ?? "") === (n.id ?? "") ? "border-cyan bg-cyan text-white" : "border-line bg-card"
+              )}
+            >
+              {n.label}
+            </Link>
+          ))}
+        </div>
+      </Card>
+      <div className="grid gap-4 md:grid-cols-3">
+        <Kpi label="Títulos analisados" value={String(data.docs)} hint="Categorias com n ≥ 8" />
+        <Kpi label="Categorias" value={String(data.categorias)} />
+        <Kpi label="Desvios" value={String(data.outliers)} tone={data.outliers ? "loss" : "gain"} />
+      </div>
+      <Card>
+        <p className="mb-2 text-sm font-semibold">Scatter por categoria</p>
+        <ScatterOutliers points={data.pontos} />
+      </Card>
+      <DataTable
+        headers={["Categoria", "Cliente", "Doc.", "NF", "Natureza", "Venc.", "Valor", metodo === "z" ? "Z-score" : "Faixa IQR"]}
+        rows={data.rows.map((r) => [
+          r.categoria,
+          r.cliente,
+          r.numero || "—",
+          r.nf || "—",
+          r.natureza === "R" ? "Receber" : "Pagar",
+          formatDate(r.vencimento),
+          money(r.valor),
+          metodo === "z"
+            ? r.zscore.toFixed(2)
+            : `${money(r.limInf)} – ${money(r.limSup)}`,
+        ])}
       />
     </div>
   );

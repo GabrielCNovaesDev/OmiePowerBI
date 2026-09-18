@@ -12,9 +12,50 @@ export default async function ResultadoPage({
   const { period, filter } = await readParams(searchParams);
   const [kpi, monthly] = await Promise.all([getResultado(period.from, period.to, filter), getResultadoMensal(period.from, period.to, filter)]);
   const labels = monthly.map((m) => m.mes.slice(5));
-  const pctBruto = kpi.receita ? (kpi.bruto / kpi.receita) * 100 : 0;
-  const pctDesp = kpi.receita ? (kpi.despesas / kpi.receita) * 100 : 0;
-  const pctRes = kpi.receita ? (kpi.resultado / kpi.receita) * 100 : 0;
+  const pct = (part: number) => (kpi.receita ? (part / kpi.receita) * 100 : 0);
+  const zeros = monthly.map(() => 0);
+  const charts = [
+    {
+      title: "Receita bruta",
+      value: pct(kpi.receita),
+      target: 100,
+      entradas: monthly.map((m) => m.receita),
+      saidas: zeros,
+      saldo: monthly.map((m) => m.receita),
+    },
+    {
+      title: "Custos operacionais",
+      value: pct(kpi.custos),
+      target: 30,
+      entradas: zeros,
+      saidas: monthly.map((m) => m.custos),
+      saldo: monthly.map((m) => m.custos),
+    },
+    {
+      title: "Resultado bruto",
+      value: pct(kpi.bruto),
+      target: 35,
+      entradas: monthly.map((m) => m.receita),
+      saidas: monthly.map((m) => m.custos),
+      saldo: monthly.map((m) => m.receita - m.custos),
+    },
+    {
+      title: "Despesas",
+      value: pct(kpi.despesas),
+      target: 10,
+      entradas: zeros,
+      saidas: monthly.map((m) => m.despesas),
+      saldo: monthly.map((m) => m.despesas),
+    },
+    {
+      title: "Resultado do exercício",
+      value: pct(kpi.resultado),
+      target: 15,
+      entradas: monthly.map((m) => (m.resultado > 0 ? m.resultado : 0)),
+      saidas: monthly.map((m) => (m.resultado < 0 ? Math.abs(m.resultado) : 0)),
+      saldo: monthly.map((m) => m.resultado),
+    },
+  ];
 
   return (
     <div className="space-y-4">
@@ -22,51 +63,23 @@ export default async function ResultadoPage({
       <div className="grid gap-4 xl:grid-cols-[220px_1fr]">
         <div className="space-y-2">
           <Kpi label="Receita bruta" value={kpi.receita} hint="100%" compact />
-          <Kpi label="Custos operacionais" value={-kpi.custos} tone="loss" hint={`${kpi.receita ? ((kpi.custos / kpi.receita) * 100).toFixed(1) : 0}%`} compact />
+          <Kpi label="Custos operacionais" value={-kpi.custos} tone="loss" hint={`${pct(kpi.custos).toFixed(1)}%`} compact />
           <Kpi label="Resultado bruto" value={kpi.bruto} tone={kpi.bruto >= 0 ? "gain" : "loss"} compact />
           <Kpi label="Despesas" value={-kpi.despesas} tone="pay" compact />
           <Kpi label="Resultado do exercício" value={kpi.resultado} tone={kpi.resultado >= 0 ? "gain" : "loss"} compact />
         </div>
         <div className="grid gap-4">
-          <Card>
-            <div className="grid gap-3 md:grid-cols-[180px_1fr]">
-              <GaugePct value={pctBruto} target={35} />
-              <div>
-                <p className="mb-2 text-sm font-semibold">Resultado bruto</p>
-                <ComboCashflow
-                  labels={labels}
-                  entradas={monthly.map((m) => m.receita)}
-                  saidas={monthly.map((m) => m.custos)}
-                  saldo={monthly.map((m) => m.receita - m.custos)}
-                  height={220}
-                />
+          {charts.map((chart) => (
+            <Card key={chart.title}>
+              <div className="grid gap-3 md:grid-cols-[180px_1fr]">
+                <GaugePct value={chart.value} target={chart.target} />
+                <div>
+                  <p className="mb-2 text-sm font-semibold">{chart.title}</p>
+                  <ComboCashflow labels={labels} entradas={chart.entradas} saidas={chart.saidas} saldo={chart.saldo} height={180} />
+                </div>
               </div>
-            </div>
-          </Card>
-          <Card>
-            <div className="grid gap-3 md:grid-cols-[180px_1fr]">
-              <GaugePct value={pctDesp} target={10} />
-              <div>
-                <p className="mb-2 text-sm font-semibold">Despesas</p>
-                <ComboCashflow labels={labels} entradas={monthly.map(() => 0)} saidas={monthly.map((m) => m.despesas)} saldo={monthly.map((m) => m.despesas)} height={180} />
-              </div>
-            </div>
-          </Card>
-          <Card>
-            <div className="grid gap-3 md:grid-cols-[180px_1fr]">
-              <GaugePct value={pctRes} target={15} />
-              <div>
-                <p className="mb-2 text-sm font-semibold">Resultado do exercício</p>
-                <ComboCashflow
-                  labels={labels}
-                  entradas={monthly.map((m) => (m.resultado > 0 ? m.resultado : 0))}
-                  saidas={monthly.map((m) => (m.resultado < 0 ? Math.abs(m.resultado) : 0))}
-                  saldo={monthly.map((m) => m.resultado)}
-                  height={180}
-                />
-              </div>
-            </div>
-          </Card>
+            </Card>
+          ))}
         </div>
       </div>
     </div>

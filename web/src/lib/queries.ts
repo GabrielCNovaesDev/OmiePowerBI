@@ -95,7 +95,9 @@ export async function getHomeKpis(filter?: DimFilter): Promise<KpiHome> {
         COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='P' AND status NOT IN ('CANCELADO','PAGO','LIQUIDADO') AND data_vencimento BETWEEN CURRENT_DATE AND CURRENT_DATE + 7),0) AS pag7,
         COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='P' AND status NOT IN ('CANCELADO','PAGO','LIQUIDADO') AND data_vencimento BETWEEN CURRENT_DATE AND CURRENT_DATE + 30),0) AS pag30
       FROM fato.titulo
-      WHERE TRUE ${extraSql}`,
+      WHERE TRUE ${extraSql}
+        AND valor_aberto > 0
+        AND status::text NOT IN ('CANCELADO','LIQUIDADO')`,
       b.values
     ),
     query<Record<string, unknown>>(

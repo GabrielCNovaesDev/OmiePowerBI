@@ -5,22 +5,24 @@ import { headers } from "next/headers";
 import { AdminShell } from "@/components/admin-ui";
 import { Shell } from "@/components/shell";
 import { formatDateTime } from "@/lib/format";
-import { getFilterOptions } from "@/lib/dash";
 import { query } from "@/lib/db";
 import { auth } from "@/auth";
 import { empresaFromHeaders, resolveTenant, tenantLabel } from "@/lib/tenant";
 import { Binder, dimSql } from "@/lib/params";
+import type { FilterOptions } from "@/components/filters";
 import "./globals.css";
 
 const geist = Geist({
   subsets: ["latin"],
   variable: "--font-geist",
+  display: "swap",
 });
 
 const brand = Montserrat({
   subsets: ["latin"],
   weight: ["500", "600"],
   variable: "--font-montserrat",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -54,7 +56,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   let company: string | null = null;
   let lastSync: string | null = null;
-  let filterOptions = null;
+  let filterOptions: FilterOptions | null = null;
   let tenantName = session.user.name || session.user.email || "";
   let papel = session.user.papel;
 
@@ -87,9 +89,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     const last = rows[0];
     if (last?.status === "running") lastSync = `Carga em andamento (${last.metodo})`;
     else if (last?.ts) lastSync = formatDateTime(last.ts);
-    const dims = await getFilterOptions(filter);
     filterOptions = {
-      ...dims,
+      categorias: [],
+      contas: [],
+      clientes: [],
+      departamentos: [],
       empresas: tenant.empresas.map((e) => ({
         codigo: e.app_key,
         descricao: e.apelido || e.razao_social || e.app_key,

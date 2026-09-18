@@ -1,12 +1,19 @@
 import { resolvePeriod, type PeriodBounds } from "./period";
 import { auth } from "@/auth";
 import { resolveTenant, type Tenant } from "./tenant";
-import { oneParam } from "./params-shared";
+import { oneParam, parseContaParam, TIPO_CONTA_CODES } from "./params-shared";
 import { redirect } from "next/navigation";
+
+function parseTipoConta(value?: string): string | undefined {
+  if (!value || !TIPO_CONTA_CODES.has(value)) return undefined;
+  return value;
+}
 
 export type { DimFilter } from "./params-shared";
 export {
   GLOBAL_FILTER_KEYS,
+  TIPO_CONTA_CODES,
+  TIPO_CONTA_OPTIONS,
   globalQuery,
   hrefWith,
   Binder,
@@ -42,7 +49,8 @@ export async function readParams(
       appKeys: tenant.selectedKeys,
       cliente: oneParam(sp, "cliente"),
       categoria: oneParam(sp, "categoria"),
-      conta: oneParam(sp, "conta"),
+      ...parseContaParam(sp),
+      tipoConta: parseTipoConta(oneParam(sp, "tipo_conta")),
       departamento: oneParam(sp, "departamento"),
     },
     raw: sp,

@@ -27,6 +27,7 @@ export function EmpresaPicker({
     else sp.set("empresa", next);
     sp.delete("cliente");
     sp.delete("categoria");
+    sp.delete("tipo_conta");
     sp.delete("conta");
     sp.delete("departamento");
     const q = sp.toString();

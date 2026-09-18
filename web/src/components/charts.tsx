@@ -3,8 +3,12 @@
 import dynamic from "next/dynamic";
 import type { EChartsOption } from "echarts";
 import { compactMoney } from "@/lib/format";
+import echarts from "@/lib/echarts";
 
-const ReactECharts = dynamic(() => import("echarts-for-react"), { ssr: false });
+const ReactECharts = dynamic(
+  () => import("echarts-for-react/esm/core").then((mod) => mod.default),
+  { ssr: false }
+);
 
 const COLORS = {
   receive: "#4ea3d9",
@@ -21,7 +25,7 @@ function Chart({ option, height = 280, empty }: { option: EChartsOption | null; 
   if (!option) {
     return <p className="py-14 text-center text-sm text-mist">{empty ?? "Sem dados neste recorte."}</p>;
   }
-  return <ReactECharts option={option} style={{ height }} notMerge lazyUpdate />;
+  return <ReactECharts echarts={echarts} option={option} style={{ height }} notMerge lazyUpdate />;
 }
 
 const moneyAxis = {
@@ -57,6 +61,65 @@ export function ComboCashflow({
       { name: "Entrada", type: "bar", data: entradas, itemStyle: { color: COLORS.receive, borderRadius: [3, 3, 0, 0] }, barGap: "10%" },
       { name: "Saída", type: "bar", data: saidas, itemStyle: { color: COLORS.pay, borderRadius: [3, 3, 0, 0] } },
       { name: "Saldo em conta", type: "line", yAxisIndex: 1, data: saldo, itemStyle: { color: COLORS.gold }, lineStyle: { width: 3 }, symbolSize: 8 },
+    ],
+  };
+  return <Chart option={option} height={height} />;
+}
+
+export function ComboCashflowAtualPrevisto({
+  labels,
+  entradaAtual,
+  saidaAtual,
+  entradaPrev,
+  saidaPrev,
+  saldoAtual,
+  saldoPrevisto,
+  height = 360,
+}: {
+  labels: string[];
+  entradaAtual: number[];
+  saidaAtual: number[];
+  entradaPrev: number[];
+  saidaPrev: number[];
+  saldoAtual: Array<number | null>;
+  saldoPrevisto: number[];
+  height?: number;
+}) {
+  if (!labels.length) return <Chart option={null} />;
+  const option: EChartsOption = {
+    tooltip: { trigger: "axis" },
+    legend: {
+      data: ["Entrada atual", "Entrada prevista", "Saída atual", "Saída prevista", "Saldo atual", "Saldo previsto"],
+      bottom: 0,
+      textStyle: { color: COLORS.mist },
+    },
+    grid: { left: 56, right: 56, top: 24, bottom: 72 },
+    xAxis: { type: "category", data: labels, axisLabel: { color: COLORS.mist } },
+    yAxis: [moneyAxis, { ...moneyAxis, position: "right" }],
+    series: [
+      { name: "Entrada atual", type: "bar", stack: "entrada", data: entradaAtual, itemStyle: { color: COLORS.receive, borderRadius: [0, 0, 0, 0] } },
+      { name: "Entrada prevista", type: "bar", stack: "entrada", data: entradaPrev, itemStyle: { color: "#9fd4ee", borderRadius: [3, 3, 0, 0] } },
+      { name: "Saída atual", type: "bar", stack: "saida", data: saidaAtual, itemStyle: { color: COLORS.pay } },
+      { name: "Saída prevista", type: "bar", stack: "saida", data: saidaPrev, itemStyle: { color: "#f0a8a8", borderRadius: [3, 3, 0, 0] } },
+      {
+        name: "Saldo atual",
+        type: "line",
+        yAxisIndex: 1,
+        data: saldoAtual,
+        itemStyle: { color: COLORS.cyan },
+        lineStyle: { width: 2 },
+        symbolSize: 7,
+        connectNulls: false,
+      },
+      {
+        name: "Saldo previsto",
+        type: "line",
+        yAxisIndex: 1,
+        data: saldoPrevisto,
+        itemStyle: { color: COLORS.gold },
+        lineStyle: { width: 3 },
+        symbolSize: 8,
+      },
     ],
   };
   return <Chart option={option} height={height} />;
@@ -170,6 +233,7 @@ export function AreaLine({ labels, series }: { labels: string[]; series: Array<{
 }
 
 export function GaugePct({ value, target = 35 }: { value: number; target?: number }) {
+  const needle = Math.min(Math.max(value, 0), 100);
   const option: EChartsOption = {
     series: [
       {
@@ -178,6 +242,8 @@ export function GaugePct({ value, target = 35 }: { value: number; target?: numbe
         endAngle: -20,
         min: 0,
         max: 100,
+        center: ["50%", "58%"],
+        radius: "92%",
         pointer: { show: true, length: "60%" },
         axisLine: {
           lineStyle: {
@@ -192,12 +258,17 @@ export function GaugePct({ value, target = 35 }: { value: number; target?: numbe
         axisTick: { show: false },
         splitLine: { show: false },
         axisLabel: { show: false },
-        detail: { formatter: () => `${value.toFixed(1)}%`, fontSize: 18, offsetCenter: [0, "60%"], color: COLORS.ink },
-        data: [{ value }],
-        title: { show: false },
+        detail: { formatter: () => `${value.toFixed(1)}%`, fontSize: 18, offsetCenter: [0, "58%"], color: COLORS.ink },
+        data: [{ value: needle, name: `Meta ${target.toFixed(0)}%` }],
+        title: {
+          show: true,
+          offsetCenter: [0, "-58%"],
+          color: COLORS.mist,
+          fontSize: 11,
+          fontWeight: 500,
+        },
       },
     ],
-    graphic: [{ type: "text", left: "center", top: 18, style: { text: `Meta ${target.toFixed(0)}%`, fill: COLORS.mist, fontSize: 11 } }],
   };
   return <Chart option={option} height={180} />;
 }
@@ -230,6 +301,60 @@ export function Waterfall({ labels, values }: { labels: string[]; values: number
     ],
   };
   return <Chart option={option} height={280} />;
+}
+
+export function ScatterOutliers({
+  points,
+  height = 380,
+}: {
+  points: Array<{ categoria: string; valor: number; outlier: boolean; cliente: string; numero: string | null }>;
+  height?: number;
+}) {
+  if (!points.length) return <Chart option={null} />;
+  const cats = Array.from(new Set(points.map((p) => p.categoria))).slice(0, 24);
+  const index = new Map(cats.map((c, i) => [c, i]));
+  const inShown = points.filter((p) => index.has(p.categoria));
+  const toPoint = (p: (typeof points)[number]) => ({
+    value: [index.get(p.categoria) ?? 0, p.valor] as [number, number],
+    categoria: p.categoria,
+    cliente: p.cliente,
+    numero: p.numero,
+  });
+  const option: EChartsOption = {
+    tooltip: {
+      trigger: "item",
+      formatter: (p: unknown) => {
+        const x = p as { seriesName: string; data: { categoria: string; cliente: string; numero: string | null; value: [number, number] } };
+        const d = x.data;
+        return `${d.categoria}<br/>${x.seriesName}<br/>${compactMoney(d.value[1])}<br/>${d.cliente}${d.numero ? `<br/>Doc. ${d.numero}` : ""}`;
+      },
+    },
+    legend: { data: ["Dentro da faixa", "Desvio"], bottom: 0, textStyle: { color: COLORS.mist } },
+    grid: { left: 56, right: 16, top: 16, bottom: 88 },
+    xAxis: {
+      type: "category",
+      data: cats,
+      axisLabel: { color: COLORS.mist, rotate: 28, width: 88, overflow: "truncate", interval: 0 },
+    },
+    yAxis: moneyAxis,
+    series: [
+      {
+        name: "Dentro da faixa",
+        type: "scatter",
+        symbolSize: 8,
+        itemStyle: { color: COLORS.receive, opacity: 0.7 },
+        data: inShown.filter((p) => !p.outlier).map(toPoint),
+      },
+      {
+        name: "Desvio",
+        type: "scatter",
+        symbolSize: 12,
+        itemStyle: { color: COLORS.pay },
+        data: inShown.filter((p) => p.outlier).map(toPoint),
+      },
+    ],
+  };
+  return <Chart option={option} height={height} />;
 }
 
 export function Spark({ data, color }: { data: number[]; color: string }) {

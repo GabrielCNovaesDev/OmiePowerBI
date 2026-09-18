@@ -80,3 +80,49 @@ export function yearStartISO(): string {
 export function todayISO(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
 }
+
+function fromISO(isoDate?: string): Date {
+  return isoDate ? new Date(`${isoDate}T00:00:00`) : todaySP();
+}
+
+/** Segunda-feira da semana corrente (calendário comercial). */
+export function startOfWeekISO(isoDate?: string): string {
+  const d = fromISO(isoDate);
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  return iso(d);
+}
+
+export function endOfWeekISO(isoDate?: string): string {
+  const d = fromISO(startOfWeekISO(isoDate));
+  d.setDate(d.getDate() + 6);
+  return iso(d);
+}
+
+export function startOfMonthISO(isoDate?: string): string {
+  return iso(startOfMonth(fromISO(isoDate)));
+}
+
+export function endOfMonthISO(isoDate?: string): string {
+  return iso(endOfMonth(fromISO(isoDate)));
+}
+
+export function endOfYearISO(isoDate?: string): string {
+  const d = fromISO(isoDate);
+  return iso(new Date(d.getFullYear(), 11, 31));
+}
+
+/** Horizonte do fluxo previsto: meses futuros do recorte (ou só o passado, se o período já encerrou). */
+export function cashForecastTo(period: PeriodBounds): string {
+  const today = todaySP();
+  switch (period.key) {
+    case "este_mes":
+      return iso(endOfMonth(today));
+    case "ultimo_mes":
+    case "jan_ultimo":
+      return period.to;
+    default:
+      return endOfYearISO();
+  }
+}

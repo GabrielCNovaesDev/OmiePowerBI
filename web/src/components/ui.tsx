@@ -161,7 +161,7 @@ export function DataTable({
           {rows.length === 0 ? (
             <tr>
               <td className="px-3 py-8 text-mist" colSpan={headers.length}>
-                Sem registros neste recorte. Os números vêm da carga Omie — não dos prints de referência.
+                Sem registros neste recorte.
               </td>
             </tr>
           ) : null}
