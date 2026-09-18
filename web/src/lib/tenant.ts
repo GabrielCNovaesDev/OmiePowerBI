@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { query } from "./db";
 import type { Session } from "next-auth";
 import type { Papel } from "@/auth.config";
@@ -25,7 +26,7 @@ function isStaff(papel: Papel) {
   return papel === "admin" || papel === "interno";
 }
 
-async function loadFromAplicativo(userId: string, papel: Papel): Promise<EmpresaOpt[]> {
+const loadFromAplicativo = cache(async function loadFromAplicativo(userId: string, papel: Papel): Promise<EmpresaOpt[]> {
   try {
     if (isStaff(papel)) {
       return query<EmpresaOpt>(
@@ -46,9 +47,9 @@ async function loadFromAplicativo(userId: string, papel: Papel): Promise<Empresa
   } catch {
     return [];
   }
-}
+});
 
-async function loadFromDimEmpresa(): Promise<EmpresaOpt[]> {
+const loadFromDimEmpresa = cache(async function loadFromDimEmpresa(): Promise<EmpresaOpt[]> {
   try {
     return query<EmpresaOpt>(
       `SELECT app_key,
@@ -60,7 +61,7 @@ async function loadFromDimEmpresa(): Promise<EmpresaOpt[]> {
   } catch {
     return [];
   }
-}
+});
 
 export async function resolveTenant(session: Session, empresaParam?: string | null): Promise<Tenant> {
   const user = session.user;

@@ -1,6 +1,7 @@
 import { Pool } from "pg";
 
-const globalForPool = globalThis as unknown as { pool?: Pool };
+const POOL_VERSION = 3;
+const globalForPool = globalThis as unknown as { pool?: Pool; poolVersion?: number };
 
 function databaseUrl(): string {
   const url = process.env.DATABASE_URL;
@@ -17,14 +18,16 @@ function databaseUrl(): string {
 }
 
 export function getPool(): Pool {
-  if (!globalForPool.pool) {
+  if (!globalForPool.pool || globalForPool.poolVersion !== POOL_VERSION) {
+    void globalForPool.pool?.end().catch(() => {});
     globalForPool.pool = new Pool({
       connectionString: databaseUrl(),
-      max: 4,
+      max: 8,
       connectionTimeoutMillis: 20000,
       idleTimeoutMillis: 10000,
       ssl: { rejectUnauthorized: false },
     });
+    globalForPool.poolVersion = POOL_VERSION;
   }
   return globalForPool.pool;
 }
