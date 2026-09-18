@@ -365,6 +365,10 @@ CREATE INDEX idx_titulo_cc                ON fato.titulo (app_key, codigo_cc_omi
 CREATE INDEX idx_titulo_emissao           ON fato.titulo (app_key, data_emissao);
 CREATE INDEX idx_titulo_pagamento         ON fato.titulo (app_key, data_pagamento) WHERE data_pagamento IS NOT NULL;
 CREATE INDEX idx_titulo_omie_alteracao    ON fato.titulo (app_key, omie_alteracao_data) WHERE omie_alteracao_data IS NOT NULL;
+CREATE INDEX idx_titulo_aberto_venc       ON fato.titulo (app_key, natureza, data_vencimento)
+  WHERE valor_aberto > 0 AND status NOT IN ('CANCELADO','RECEBIDO','PAGO','LIQUIDADO');
+CREATE INDEX idx_titulo_atrasado          ON fato.titulo (app_key, natureza)
+  WHERE status = 'ATRASADO';
 
 COMMENT ON TABLE fato.titulo IS 'Fato principal: títulos a pagar e a receber com resumo de baixa desnormalizado. 1 linha por parcela.';
 
@@ -522,7 +526,7 @@ CREATE TABLE fato.saldo_conta_corrente (
     created_at              TIMESTAMPTZ       NOT NULL DEFAULT NOW(),
     UNIQUE (app_key, codigo_cc_omie, data_referencia)
 );
-CREATE INDEX idx_saldo_cc_data ON fato.saldo_conta_corrente (app_key, data_referencia);
+CREATE INDEX idx_saldo_cc_lookup ON fato.saldo_conta_corrente (app_key, codigo_cc_omie, data_referencia DESC);
 COMMENT ON TABLE fato.saldo_conta_corrente IS 'Snapshot de saldos por conta corrente. 1 foto por CC por dia.';
 
 -- ─────────────────────────────────────────────────────────────────────────────
