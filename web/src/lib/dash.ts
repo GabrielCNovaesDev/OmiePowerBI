@@ -286,7 +286,12 @@ async function getSaldoAbertura(from: string, filter?: DimFilter): Promise<numbe
   return n(openingRows[0]?.saldo);
 }
 
-const PREVISTO_DATA_SQL = `CASE WHEN t.data_vencimento < CURRENT_DATE THEN CURRENT_DATE ELSE t.data_vencimento END`;
+// O extrato da Omie traz também lançamentos ainda não realizados (situação
+// "Previsto"); o realizado do Fluxo de Caixa do ERP não os inclui. Valores do
+// extrato vêm com sinal: entradas positivas, saídas negativas.
+const EXTRATO_REALIZADO = `COALESCE(e.situacao,'') <> 'Previsto'`;
+
+const PREVISTO_DATA_SQL =`CASE WHEN t.data_vencimento < CURRENT_DATE THEN CURRENT_DATE ELSE t.data_vencimento END`;
 
 async function queryPrevistoMensal(from: string, to: string, filter?: DimFilter) {
   const b = new Binder();
@@ -327,13 +332,13 @@ async function queryFluxoMensalAtual(from: string, to: string, filter?: DimFilte
               WHERE e.natureza='S' AND COALESCE(c.transferencia,'N') <> 'S'
             ),0)::float AS saida,
             COALESCE(SUM(CASE
-              WHEN COALESCE(c.transferencia,'N')='S' AND e.natureza='E' THEN e.valor_documento
-              WHEN COALESCE(c.transferencia,'N')='S' AND e.natureza='S' THEN -e.valor_documento
+              WHEN COALESCE(c.transferencia,'N')='S' THEN e.valor_documento
               ELSE 0 END),0)::float AS transf
      FROM ${EXTRATO_RATEADO} e
      LEFT JOIN dim.categoria c ON c.app_key=e.app_key AND c.codigo=e.codigo_categoria
      WHERE e.data_lancamento BETWEEN ${fromP}::date AND ${toP}::date
        AND COALESCE(e.codigo_lancamento,0) <> 0
+         AND ${EXTRATO_REALIZADO}
        ${extratoDims}
      GROUP BY 1
      ORDER BY 1`,
@@ -623,6 +628,7 @@ async function getFluxoDrillFacts(
        LEFT JOIN dim.cliente cli ON cli.app_key=e.app_key AND cli.codigo_cliente_omie=e.codigo_cliente_omie
        WHERE e.data_lancamento BETWEEN ${fromP}::date AND ${toP}::date
          AND COALESCE(e.codigo_lancamento,0) <> 0
+         AND ${EXTRATO_REALIZADO}
          AND COALESCE(c.transferencia,'N') <> 'S'
          ${extratoDims}
      ) x
@@ -782,6 +788,7 @@ export async function getFluxoDiarioMes(from: string, to: string, filter?: DimFi
        FROM ${EXTRATO_RATEADO} e
        WHERE e.data_lancamento BETWEEN ${aFrom}::date AND ${aTo}::date
          AND COALESCE(e.codigo_lancamento,0) <> 0
+         AND ${EXTRATO_REALIZADO}
          ${dimSql(a, filter, { appKey: "e.app_key", cliente: "e.codigo_cliente_omie", categoria: "e.codigo_categoria", conta: "e.codigo_cc_omie" })}
        GROUP BY 1
        ORDER BY 1`,

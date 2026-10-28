@@ -17,6 +17,11 @@ Detalhes técnicos em [analise-tecnica.md](analise-tecnica.md).
 - [x] Telas por categoria usam o rateio de categoria (títulos e extrato)
 - [x] Relatório Diário: saídas somavam no saldo em vez de subtrair
 - [ ] Conferir cada tela do BI contra o relatório do ERP equivalente
+  - [x] Resumo
+  - [x] Fluxo de Caixa realizado (set/2026: 50/50 categorias)
+  - [ ] DRE
+  - [ ] Receitas / Custos / Despesas
+  - [ ] Contas a pagar / receber (telas)
 - [ ] Repetir a conferência no Instituto LM (depois — prioridade é a DI PRIMO)
 
 ## Ajustes de tela
