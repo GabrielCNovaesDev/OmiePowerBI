@@ -73,7 +73,7 @@ async function omieCall(url, call, param, options = {}) {
           json.omie_fail?.description ||
           json.faultcode ||
           "omie_fail";
-        const retryable = /too many requests|425|429|temporar/i.test(String(desc));
+        const retryable = /too many requests|425|429|temporar|sendo executada|tentar novamente/i.test(String(desc));
         if (retryable && attempt < MAX_RETRIES) {
           const wait = BASE_DELAY_MS * attempt * 3;
           await sleep(wait);

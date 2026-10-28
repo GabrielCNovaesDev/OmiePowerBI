@@ -75,12 +75,36 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Executa fn sobre items com no máximo `limit` em paralelo, preservando a ordem.
+async function mapLimit(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next;
+      next += 1;
+      results[i] = await fn(items[i], i);
+    }
+  }
+  const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, worker);
+  await Promise.all(workers);
+  return results;
+}
+
+function maskKey(key) {
+  const s = String(key || "");
+  return s.length > 4 ? `***${s.slice(-4)}` : "***";
+}
+
 module.exports = {
   parseOmieDate,
   num,
   str,
   flag,
   todayBr,
+  formatBr,
   monthWindows,
   sleep,
+  mapLimit,
+  maskKey,
 };
