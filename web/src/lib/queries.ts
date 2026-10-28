@@ -231,7 +231,7 @@ function recorteClause(recorte?: string): string {
     return `AND t.status = 'ATRASADO' AND t.valor_aberto > 0`;
   }
   if (recorte === "vencer") {
-    return `AND t.data_vencimento >= CURRENT_DATE AND t.valor_aberto > 0 AND t.status::text NOT IN ('CANCELADO','PAGO','RECEBIDO','LIQUIDADO')`;
+    return `AND t.status <> 'ATRASADO' AND t.valor_aberto > 0 AND t.status::text NOT IN ('CANCELADO','PAGO','RECEBIDO','LIQUIDADO')`;
   }
   if (recorte === "aberto") {
     return `AND t.valor_aberto > 0 AND t.status::text NOT IN ('CANCELADO','PAGO','RECEBIDO','LIQUIDADO')`;

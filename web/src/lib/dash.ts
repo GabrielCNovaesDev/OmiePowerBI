@@ -844,11 +844,15 @@ export async function getFluxoDiarioMes(from: string, to: string, filter?: DimFi
   return days;
 }
 
+// Atrasado × a vencer pelo status da Omie, não pela data: um boleto "A vencer
+// (D+1)" com vencimento ontem continua a vencer no ERP.
+function agingStatusClause(natureza: "R" | "P", atrasado: boolean) {
+  return atrasado ? `AND t.status = 'ATRASADO'` : `AND t.status <> 'ATRASADO' AND t.status ${openClause(natureza)}`;
+}
+
 export async function getAgingBi(natureza: "R" | "P", atrasado: boolean, filter?: DimFilter): Promise<AgingSlice[]> {
   const sign = atrasado ? "CURRENT_DATE - t.data_vencimento" : "t.data_vencimento - CURRENT_DATE";
-  const extra = atrasado
-    ? `AND t.data_vencimento < CURRENT_DATE AND t.status = 'ATRASADO'`
-    : `AND t.data_vencimento >= CURRENT_DATE AND t.status ${openClause(natureza)}`;
+  const extra = agingStatusClause(natureza, atrasado);
   const b = new Binder();
   const nat = b.add(natureza);
   return query<AgingSlice>(
@@ -876,9 +880,7 @@ export async function getAgingByDim(
   dim: "categoria" | "cliente",
   filter?: DimFilter
 ): Promise<NamedValue[]> {
-  const extra = atrasado
-    ? `AND t.data_vencimento < CURRENT_DATE`
-    : `AND t.data_vencimento >= CURRENT_DATE`;
+  const extra = agingStatusClause(natureza, atrasado);
   const nameExpr =
     dim === "categoria"
       ? `COALESCE(cat.descricao, t.codigo_categoria, '(sem categoria)')`

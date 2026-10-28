@@ -20,9 +20,10 @@ Detalhes técnicos em [analise-tecnica.md](analise-tecnica.md).
   - [x] Resumo
   - [x] Fluxo de Caixa realizado (set/2026: 50/50 categorias)
   - [~] DRE — mantida em caixa; regras do Omie levantadas, implementação no backlog
-  - [x] Receitas / Custos / Despesas e Resultados (= Recebimentos/Pagamentos realizados do ERP, out/25–out/26)
-  - [ ] Carga única do histórico do extrato (36 meses) para os meses antes de out/2025
-  - [ ] Contas a pagar / receber (telas)
+  - [x] Receitas / Custos / Despesas e Resultados = Recebimentos/Pagamentos realizados do ERP (histórico completo, fev/24–out/26)
+  - [x] Carga única do histórico do extrato (36 meses) — 28/10, 25 min
+  - [x] Contas a pagar / receber (com "todas as contas": totais e faixas = ERP; tela abre com as Consideradas)
+  - [x] Nomes com "&amp;" (entidades HTML da API) corrigidos na carga e no banco
 - [ ] Repetir a conferência no Instituto LM (depois — prioridade é a DI PRIMO)
 
 ## Depois (backlog)

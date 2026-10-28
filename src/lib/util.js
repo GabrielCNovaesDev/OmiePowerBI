@@ -16,9 +16,22 @@ function num(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+const HTML_ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+
+// A API da Omie devolve textos com entidades HTML ("COM &amp; IMP").
+function decodeEntities(s) {
+  return s.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (match, ent) => {
+    if (ent[0] === "#") {
+      const code = ent[1].toLowerCase() === "x" ? parseInt(ent.slice(2), 16) : parseInt(ent.slice(1), 10);
+      return Number.isFinite(code) && code > 0 ? String.fromCodePoint(code) : match;
+    }
+    return HTML_ENTITIES[ent.toLowerCase()] ?? match;
+  });
+}
+
 function str(value, max) {
   if (value == null) return null;
-  const s = String(value).trim();
+  const s = decodeEntities(String(value)).trim();
   if (!s) return null;
   return max ? s.slice(0, max) : s;
 }
