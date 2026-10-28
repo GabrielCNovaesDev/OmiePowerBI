@@ -359,36 +359,51 @@ function syncResumo() {
   });
 }
 
+// O Resumo da Omie (ObterResumoFinancas) só considera contas correntes marcadas
+// para "Resumo e Fluxo de Caixa", e o "total" de cada card é atrasado + vence
+// hoje — não o total em aberto. As consultas do BI reproduzem essas regras
+// (conferido contra o ERP da DI PRIMO em 28/10/2026).
+const TITULO_CONSIDERADO = `
+  FROM fato.titulo t
+  JOIN dim.conta_corrente cc ON cc.app_key=t.app_key AND cc.codigo_cc_omie=t.codigo_cc_omie
+  WHERE t.app_key=$1 AND COALESCE(cc.visivel_resumo,'S')='S' AND t.valor_aberto > 0`;
+
 async function reconcile() {
   const app = appKey();
+  const resumo = (col) =>
+    `SELECT ${col} FROM fato.resumo_snapshot WHERE app_key=$1 ORDER BY data_referencia DESC LIMIT 1`;
   const checks = [
     {
       metrica: "ar_valor_total",
-      omie: `SELECT ar_valor_total FROM fato.resumo_snapshot WHERE app_key=$1 ORDER BY data_referencia DESC LIMIT 1`,
-      bi: `SELECT COALESCE(SUM(valor_aberto),0) AS v FROM fato.titulo WHERE app_key=$1 AND natureza='R' AND status NOT IN ('CANCELADO','RECEBIDO','LIQUIDADO')`,
+      omie: resumo("ar_valor_total"),
+      bi: `SELECT COALESCE(SUM(t.valor_aberto),0) AS v ${TITULO_CONSIDERADO} AND t.natureza='R' AND t.status IN ('ATRASADO','VENCEHOJE')`,
     },
     {
       metrica: "ap_valor_total",
-      omie: `SELECT ap_valor_total FROM fato.resumo_snapshot WHERE app_key=$1 ORDER BY data_referencia DESC LIMIT 1`,
-      bi: `SELECT COALESCE(SUM(valor_aberto),0) AS v FROM fato.titulo WHERE app_key=$1 AND natureza='P' AND status NOT IN ('CANCELADO','PAGO','LIQUIDADO')`,
+      omie: resumo("ap_valor_total"),
+      bi: `SELECT COALESCE(SUM(t.valor_aberto),0) AS v ${TITULO_CONSIDERADO} AND t.natureza='P' AND t.status IN ('ATRASADO','VENCEHOJE')`,
     },
     {
       metrica: "ar_valor_atraso",
-      omie: `SELECT ar_valor_atraso FROM fato.resumo_snapshot WHERE app_key=$1 ORDER BY data_referencia DESC LIMIT 1`,
-      bi: `SELECT COALESCE(SUM(valor_aberto),0) AS v FROM fato.titulo WHERE app_key=$1 AND natureza='R' AND status='ATRASADO'`,
+      omie: resumo("ar_valor_atraso"),
+      bi: `SELECT COALESCE(SUM(t.valor_aberto),0) AS v ${TITULO_CONSIDERADO} AND t.natureza='R' AND t.status='ATRASADO'`,
     },
     {
       metrica: "ap_valor_atraso",
-      omie: `SELECT ap_valor_atraso FROM fato.resumo_snapshot WHERE app_key=$1 ORDER BY data_referencia DESC LIMIT 1`,
-      bi: `SELECT COALESCE(SUM(valor_aberto),0) AS v FROM fato.titulo WHERE app_key=$1 AND natureza='P' AND status='ATRASADO'`,
+      omie: resumo("ap_valor_atraso"),
+      bi: `SELECT COALESCE(SUM(t.valor_aberto),0) AS v ${TITULO_CONSIDERADO} AND t.natureza='P' AND t.status='ATRASADO'`,
     },
     {
       metrica: "cc_saldo_total",
-      omie: `SELECT cc_saldo_total FROM fato.resumo_snapshot WHERE app_key=$1 ORDER BY data_referencia DESC LIMIT 1`,
-      bi: `SELECT COALESCE(SUM(saldo_atual),0) AS v FROM fato.saldo_conta_corrente s
-           WHERE s.app_key=$1 AND s.data_referencia = (
-             SELECT MAX(data_referencia) FROM fato.saldo_conta_corrente WHERE app_key=$1
-           )`,
+      omie: resumo("cc_saldo_total"),
+      bi: `SELECT COALESCE(SUM(s.saldo_atual),0) AS v
+           FROM dim.conta_corrente cc
+           JOIN LATERAL (
+             SELECT saldo_atual FROM fato.saldo_conta_corrente x
+             WHERE x.app_key=cc.app_key AND x.codigo_cc_omie=cc.codigo_cc_omie
+             ORDER BY data_referencia DESC LIMIT 1
+           ) s ON true
+           WHERE cc.app_key=$1 AND COALESCE(cc.visivel_resumo,'S')='S'`,
     },
   ];
 

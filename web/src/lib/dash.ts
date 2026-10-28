@@ -3,6 +3,7 @@ import { query } from "./db";
 import { n } from "./format";
 import { todayISO, yearStartISO } from "./period";
 import { Binder, dimSql, type DimFilter } from "./params";
+import { EXTRATO_RATEADO, TITULO_RATEADO } from "./rateio";
 
 const OPEN_R = `NOT IN ('CANCELADO','RECEBIDO','LIQUIDADO')`;
 const OPEN_P = `NOT IN ('CANCELADO','PAGO','LIQUIDADO')`;
@@ -154,9 +155,9 @@ export async function getTitulosVencendo(
             COALESCE(c.razao_social, '(sem cadastro)') AS cliente,
             t.numero_documento_fiscal AS nf,
             t.data_vencimento::text AS vencimento,
-            COUNT(*)::int AS qtd,
+            COUNT(DISTINCT t.codigo_titulo_omie)::int AS qtd,
             COALESCE(SUM(t.valor_aberto),0)::float AS valor
-     FROM fato.titulo t
+     FROM ${TITULO_RATEADO} t
      LEFT JOIN dim.cliente c ON c.app_key=t.app_key AND c.codigo_cliente_omie=t.codigo_cliente_omie
      LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria
      WHERE t.natureza=${nat}
@@ -191,11 +192,11 @@ export async function getKpisPeriodo(from: string, to: string, filter?: DimFilte
       COALESCE(SUM(valor_aberto) FILTER (WHERE ${vencP}),0)::float AS pagar_hoje,
       COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='R' AND status='ATRASADO'),0)::float AS receber_atraso,
       COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='P' AND status='ATRASADO'),0)::float AS pagar_atraso,
-      COUNT(*) FILTER (WHERE ${vencR})::int AS qtd_receber,
-      COUNT(*) FILTER (WHERE ${vencP})::int AS qtd_pagar,
-      COUNT(*) FILTER (WHERE natureza='R' AND status='ATRASADO')::int AS qtd_receber_atraso,
-      COUNT(*) FILTER (WHERE natureza='P' AND status='ATRASADO')::int AS qtd_pagar_atraso
-    FROM fato.titulo t
+      COUNT(DISTINCT t.codigo_titulo_omie) FILTER (WHERE ${vencR})::int AS qtd_receber,
+      COUNT(DISTINCT t.codigo_titulo_omie) FILTER (WHERE ${vencP})::int AS qtd_pagar,
+      COUNT(DISTINCT t.codigo_titulo_omie) FILTER (WHERE natureza='R' AND status='ATRASADO')::int AS qtd_receber_atraso,
+      COUNT(DISTINCT t.codigo_titulo_omie) FILTER (WHERE natureza='P' AND status='ATRASADO')::int AS qtd_pagar_atraso
+    FROM ${TITULO_RATEADO} t
     WHERE 1=1 ${dimSql(b, filter, tituloCols())}
       AND (
         t.status = 'ATRASADO'
@@ -295,7 +296,7 @@ async function queryPrevistoMensal(from: string, to: string, filter?: DimFilter)
     `SELECT to_char(date_trunc('month', ${PREVISTO_DATA_SQL}), 'YYYY-MM') AS mes,
             COALESCE(SUM(t.valor_aberto) FILTER (WHERE t.natureza='R'),0)::float AS entrada,
             COALESCE(SUM(t.valor_aberto) FILTER (WHERE t.natureza='P'),0)::float AS saida
-     FROM fato.titulo t
+     FROM ${TITULO_RATEADO} t
      WHERE t.valor_aberto > 0
        AND t.status::text NOT IN ('CANCELADO','PAGO','RECEBIDO','LIQUIDADO')
        AND ((t.natureza='R' AND t.status ${OPEN_R}) OR (t.natureza='P' AND t.status ${OPEN_P}))
@@ -329,7 +330,7 @@ async function queryFluxoMensalAtual(from: string, to: string, filter?: DimFilte
               WHEN COALESCE(c.transferencia,'N')='S' AND e.natureza='E' THEN e.valor_documento
               WHEN COALESCE(c.transferencia,'N')='S' AND e.natureza='S' THEN -e.valor_documento
               ELSE 0 END),0)::float AS transf
-     FROM fato.extrato_movimento e
+     FROM ${EXTRATO_RATEADO} e
      LEFT JOIN dim.categoria c ON c.app_key=e.app_key AND c.codigo=e.codigo_categoria
      WHERE e.data_lancamento BETWEEN ${fromP}::date AND ${toP}::date
        AND COALESCE(e.codigo_lancamento,0) <> 0
@@ -345,11 +346,11 @@ async function queryFluxoMensalAtual(from: string, to: string, filter?: DimFilte
   const f2 = fb.add(to);
   return query<Record<string, unknown>>(
     `SELECT to_char(date_trunc('month', b.data_baixa), 'YYYY-MM') AS mes,
-            COALESCE(SUM(b.valor_baixa) FILTER (WHERE t.natureza='R'),0)::float AS entrada,
-            COALESCE(SUM(b.valor_baixa) FILTER (WHERE t.natureza='P'),0)::float AS saida,
+            COALESCE(SUM(b.valor_baixa * t.fator) FILTER (WHERE t.natureza='R'),0)::float AS entrada,
+            COALESCE(SUM(b.valor_baixa * t.fator) FILTER (WHERE t.natureza='P'),0)::float AS saida,
             0::float AS transf
      FROM fato.baixa b
-     JOIN fato.titulo t ON t.app_key=b.app_key AND t.codigo_titulo_omie=b.codigo_titulo_omie
+     JOIN ${TITULO_RATEADO} t ON t.app_key=b.app_key AND t.codigo_titulo_omie=b.codigo_titulo_omie
      WHERE b.data_baixa BETWEEN ${f1}::date AND ${f2}::date
        ${dimSql(fb, filter, tituloCols())}
      GROUP BY 1
@@ -570,7 +571,7 @@ async function getFluxoDrillFacts(
                 COALESCE(cli.razao_social, '(sem fornecedor)') AS fornecedor_nome,
                 CASE WHEN t.natureza='R' THEN t.valor_aberto ELSE 0 END AS entrada,
                 CASE WHEN t.natureza='P' THEN t.valor_aberto ELSE 0 END AS saida
-         FROM fato.titulo t
+         FROM ${TITULO_RATEADO} t
          LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria
          LEFT JOIN hier h ON h.app_key=t.app_key AND h.cat_codigo=t.codigo_categoria
          LEFT JOIN dim.categoria g ON g.app_key=t.app_key AND g.codigo=${tg}
@@ -614,7 +615,7 @@ async function getFluxoDrillFacts(
               COALESCE(cli.razao_social, e.razao_social_cliente, e.nome_cliente, '(sem fornecedor)') AS fornecedor_nome,
               CASE WHEN e.natureza='E' THEN ABS(e.valor_documento) ELSE 0 END AS entrada,
               CASE WHEN e.natureza='S' THEN ABS(e.valor_documento) ELSE 0 END AS saida
-       FROM fato.extrato_movimento e
+       FROM ${EXTRATO_RATEADO} e
        LEFT JOIN dim.categoria c ON c.app_key=e.app_key AND c.codigo=e.codigo_categoria
        LEFT JOIN hier h ON h.app_key=e.app_key AND h.cat_codigo=e.codigo_categoria
        LEFT JOIN dim.categoria g ON g.app_key=e.app_key AND g.codigo=${gExpr}
@@ -648,10 +649,10 @@ async function getFluxoDrillFacts(
                 COALESCE(h.cat_nome, NULLIF(cat.descricao, ''), NULLIF(t.codigo_categoria, ''), '(sem categoria)') AS cat_nome,
                 COALESCE(t.codigo_cliente_omie::text, 'sem') AS fornecedor_id,
                 COALESCE(cli.razao_social, '(sem fornecedor)') AS fornecedor_nome,
-                CASE WHEN t.natureza='R' THEN b.valor_baixa ELSE 0 END AS entrada,
-                CASE WHEN t.natureza='P' THEN b.valor_baixa ELSE 0 END AS saida
+                CASE WHEN t.natureza='R' THEN b.valor_baixa * t.fator ELSE 0 END AS entrada,
+                CASE WHEN t.natureza='P' THEN b.valor_baixa * t.fator ELSE 0 END AS saida
          FROM fato.baixa b
-         JOIN fato.titulo t ON t.app_key=b.app_key AND t.codigo_titulo_omie=b.codigo_titulo_omie
+         JOIN ${TITULO_RATEADO} t ON t.app_key=b.app_key AND t.codigo_titulo_omie=b.codigo_titulo_omie
          LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria
          LEFT JOIN hier h ON h.app_key=t.app_key AND h.cat_codigo=t.codigo_categoria
          LEFT JOIN dim.categoria g ON g.app_key=t.app_key AND g.codigo=${tg}
@@ -776,9 +777,9 @@ export async function getFluxoDiarioMes(from: string, to: string, filter?: DimFi
   const [actual, prev, opening] = await Promise.all([
     query<{ dia: string; entrada: number; saida: number }>(
       `SELECT e.data_lancamento::text AS dia,
-              COALESCE(SUM(e.valor_documento) FILTER (WHERE e.natureza='E'),0)::float AS entrada,
-              COALESCE(SUM(e.valor_documento) FILTER (WHERE e.natureza='S'),0)::float AS saida
-       FROM fato.extrato_movimento e
+              COALESCE(SUM(ABS(e.valor_documento)) FILTER (WHERE e.natureza='E'),0)::float AS entrada,
+              COALESCE(SUM(ABS(e.valor_documento)) FILTER (WHERE e.natureza='S'),0)::float AS saida
+       FROM ${EXTRATO_RATEADO} e
        WHERE e.data_lancamento BETWEEN ${aFrom}::date AND ${aTo}::date
          AND COALESCE(e.codigo_lancamento,0) <> 0
          ${dimSql(a, filter, { appKey: "e.app_key", cliente: "e.codigo_cliente_omie", categoria: "e.codigo_categoria", conta: "e.codigo_cc_omie" })}
@@ -788,7 +789,7 @@ export async function getFluxoDiarioMes(from: string, to: string, filter?: DimFi
     ),
     query<{ dia: string; natureza: string; valor: number }>(
       `SELECT data_vencimento::text AS dia, natureza::text, COALESCE(SUM(valor_aberto),0)::float AS valor
-       FROM fato.titulo t
+       FROM ${TITULO_RATEADO} t
        WHERE data_vencimento BETWEEN GREATEST(${pFrom}::date, CURRENT_DATE) AND ${pTo}::date
          AND valor_aberto > 0
          AND status::text NOT IN ('CANCELADO','PAGO','RECEBIDO','LIQUIDADO')
@@ -852,8 +853,8 @@ export async function getAgingBi(natureza: "R" | "P", atrasado: boolean, filter?
               ELSE 'Maior que 180'
             END AS faixa,
             COALESCE(SUM(t.valor_aberto),0)::float AS valor,
-            COUNT(*)::int AS qtd
-     FROM fato.titulo t
+            COUNT(DISTINCT t.codigo_titulo_omie)::int AS qtd
+     FROM ${TITULO_RATEADO} t
      WHERE t.natureza=${nat} AND t.valor_aberto > 0 AND t.status::text NOT IN ('CANCELADO','PAGO','RECEBIDO','LIQUIDADO')
        ${extra}
        ${dimSql(b, filter, tituloCols())}
@@ -880,8 +881,8 @@ export async function getAgingByDim(
   return query<NamedValue>(
     `SELECT ${nameExpr} AS nome,
             COALESCE(SUM(t.valor_aberto),0)::float AS valor,
-            COUNT(*)::int AS qtd
-     FROM fato.titulo t
+            COUNT(DISTINCT t.codigo_titulo_omie)::int AS qtd
+     FROM ${TITULO_RATEADO} t
      LEFT JOIN dim.cliente c ON c.app_key=t.app_key AND c.codigo_cliente_omie=t.codigo_cliente_omie
      LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria
      WHERE t.natureza=${nat} AND t.valor_aberto > 0
@@ -928,7 +929,7 @@ export async function getBreakdown(kind: Kind, from: string, to: string, base: "
   const toP = b.add(to);
   const dims = dimSql(b, filter, tituloCols());
   const join = `
-    FROM fato.titulo t
+    FROM ${TITULO_RATEADO} t
     LEFT JOIN dim.cliente c ON c.app_key=t.app_key AND c.codigo_cliente_omie=t.codigo_cliente_omie
     LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria
     LEFT JOIN dim.dre d ON d.app_key=t.app_key AND d.codigo_dre=cat.codigo_dre
@@ -957,15 +958,15 @@ export async function getResultado(from: string, to: string, filter?: DimFilter)
   const toP = b.add(to);
   const rows = await query<Record<string, unknown>>(
     `SELECT
-       COALESCE(SUM(b.valor_baixa) FILTER (WHERE t.natureza='R' AND COALESCE(cat.transferencia,'N')<>'S'),0)::float AS receita,
-       COALESCE(SUM(b.valor_baixa) FILTER (WHERE t.natureza='P' AND (
+       COALESCE(SUM(b.valor_baixa * t.fator) FILTER (WHERE t.natureza='R' AND COALESCE(cat.transferencia,'N')<>'S'),0)::float AS receita,
+       COALESCE(SUM(b.valor_baixa * t.fator) FILTER (WHERE t.natureza='P' AND (
          COALESCE(d.descricao,'') ILIKE '%custo%' OR COALESCE(cat.codigo,'') LIKE '2.01%'
        )),0)::float AS custos,
-       COALESCE(SUM(b.valor_baixa) FILTER (WHERE t.natureza='P' AND COALESCE(cat.transferencia,'N')<>'S' AND NOT (
+       COALESCE(SUM(b.valor_baixa * t.fator) FILTER (WHERE t.natureza='P' AND COALESCE(cat.transferencia,'N')<>'S' AND NOT (
          COALESCE(d.descricao,'') ILIKE '%custo%' OR COALESCE(cat.codigo,'') LIKE '2.01%'
        )),0)::float AS despesas
      FROM fato.baixa b
-     JOIN fato.titulo t ON t.app_key=b.app_key AND t.codigo_titulo_omie=b.codigo_titulo_omie
+     JOIN ${TITULO_RATEADO} t ON t.app_key=b.app_key AND t.codigo_titulo_omie=b.codigo_titulo_omie
      LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria
      LEFT JOIN dim.dre d ON d.app_key=t.app_key AND d.codigo_dre=cat.codigo_dre
      WHERE b.data_baixa BETWEEN ${fromP}::date AND ${toP}::date
@@ -987,16 +988,16 @@ export async function getResultadoMensal(from: string, to: string, filter?: DimF
   const toP = b.add(to);
   return query<{ mes: string; receita: number; custos: number; despesas: number; resultado: number }>(
     `SELECT to_char(date_trunc('month', b.data_baixa), 'YYYY-MM') AS mes,
-            COALESCE(SUM(b.valor_baixa) FILTER (WHERE t.natureza='R' AND COALESCE(cat.transferencia,'N')<>'S'),0)::float AS receita,
-            COALESCE(SUM(b.valor_baixa) FILTER (WHERE t.natureza='P' AND (
+            COALESCE(SUM(b.valor_baixa * t.fator) FILTER (WHERE t.natureza='R' AND COALESCE(cat.transferencia,'N')<>'S'),0)::float AS receita,
+            COALESCE(SUM(b.valor_baixa * t.fator) FILTER (WHERE t.natureza='P' AND (
               COALESCE(d.descricao,'') ILIKE '%custo%' OR COALESCE(cat.codigo,'') LIKE '2.01%'
             )),0)::float AS custos,
-            COALESCE(SUM(b.valor_baixa) FILTER (WHERE t.natureza='P' AND COALESCE(cat.transferencia,'N')<>'S' AND NOT (
+            COALESCE(SUM(b.valor_baixa * t.fator) FILTER (WHERE t.natureza='P' AND COALESCE(cat.transferencia,'N')<>'S' AND NOT (
               COALESCE(d.descricao,'') ILIKE '%custo%' OR COALESCE(cat.codigo,'') LIKE '2.01%'
             )),0)::float AS despesas,
             0::float AS resultado
      FROM fato.baixa b
-     JOIN fato.titulo t ON t.app_key=b.app_key AND t.codigo_titulo_omie=b.codigo_titulo_omie
+     JOIN ${TITULO_RATEADO} t ON t.app_key=b.app_key AND t.codigo_titulo_omie=b.codigo_titulo_omie
      LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria
      LEFT JOIN dim.dre d ON d.app_key=t.app_key AND d.codigo_dre=cat.codigo_dre
      WHERE b.data_baixa BETWEEN ${fromP}::date AND ${toP}::date
@@ -1021,9 +1022,9 @@ export async function getDreLinhas(from: string, to: string, filter?: DimFilter)
             COALESCE(d.descricao, cat.descricao, '(sem vínculo DRE)') AS descricao,
             COALESCE(d.nivel, 1) AS nivel,
             d.sinal,
-            COALESCE(SUM(CASE WHEN t.natureza='R' THEN b.valor_baixa ELSE -b.valor_baixa END),0)::float AS valor
+            COALESCE(SUM(CASE WHEN t.natureza='R' THEN b.valor_baixa * t.fator ELSE -b.valor_baixa * t.fator END),0)::float AS valor
      FROM fato.baixa b
-     JOIN fato.titulo t ON t.app_key=b.app_key AND t.codigo_titulo_omie=b.codigo_titulo_omie
+     JOIN ${TITULO_RATEADO} t ON t.app_key=b.app_key AND t.codigo_titulo_omie=b.codigo_titulo_omie
      LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria
      LEFT JOIN dim.dre d ON d.app_key=t.app_key AND d.codigo_dre=cat.codigo_dre
      WHERE b.data_baixa BETWEEN ${fromP}::date AND ${toP}::date
@@ -1063,9 +1064,9 @@ export async function getQaClientes(from: string, to: string, filter?: DimFilter
   const cTo = currentB.add(to);
   const current = await query<NamedValue>(
     `SELECT COALESCE(c.razao_social,'(sem cadastro)') AS nome,
-            COALESCE(SUM(b.valor_baixa),0)::float AS valor
+            COALESCE(SUM(b.valor_baixa * t.fator),0)::float AS valor
      FROM fato.baixa b
-     JOIN fato.titulo t ON t.app_key=b.app_key AND t.codigo_titulo_omie=b.codigo_titulo_omie
+     JOIN ${TITULO_RATEADO} t ON t.app_key=b.app_key AND t.codigo_titulo_omie=b.codigo_titulo_omie
      LEFT JOIN dim.cliente c ON c.app_key=t.app_key AND c.codigo_cliente_omie=t.codigo_cliente_omie
      WHERE t.natureza='R' AND b.data_baixa BETWEEN ${cFrom}::date AND ${cTo}::date
        ${dimSql(currentB, filter, tituloCols())}
@@ -1080,9 +1081,9 @@ export async function getQaClientes(from: string, to: string, filter?: DimFilter
   const pTo = prevB.add(prevTo);
   const previous = await query<NamedValue>(
     `SELECT COALESCE(c.razao_social,'(sem cadastro)') AS nome,
-            COALESCE(SUM(b.valor_baixa),0)::float AS valor
+            COALESCE(SUM(b.valor_baixa * t.fator),0)::float AS valor
      FROM fato.baixa b
-     JOIN fato.titulo t ON t.app_key=b.app_key AND t.codigo_titulo_omie=b.codigo_titulo_omie
+     JOIN ${TITULO_RATEADO} t ON t.app_key=b.app_key AND t.codigo_titulo_omie=b.codigo_titulo_omie
      LEFT JOIN dim.cliente c ON c.app_key=t.app_key AND c.codigo_cliente_omie=t.codigo_cliente_omie
      WHERE t.natureza='R' AND b.data_baixa BETWEEN ${pFrom}::date AND ${pTo}::date
        ${dimSql(prevB, filter, tituloCols())}
@@ -1118,13 +1119,13 @@ export async function getCheckPanel(from: string, to: string, filter?: DimFilter
   const extra = dimSql(bind, filter, tituloCols());
   const blank = await query<Record<string, unknown>>(
     `SELECT
-       COUNT(*) FILTER (WHERE t.codigo_cliente_omie IS NULL)::int AS clientes,
-       COUNT(*) FILTER (WHERE t.codigo_projeto IS NULL)::int AS projetos,
-       COUNT(*) FILTER (WHERE t.codigo_categoria IS NULL OR t.codigo_categoria='')::int AS categorias,
-       COUNT(*) FILTER (WHERE t.codigo_departamento IS NULL OR t.codigo_departamento='')::int AS departamentos,
-       COUNT(*) FILTER (WHERE t.numero_documento_fiscal IS NULL OR t.numero_documento_fiscal='')::int AS nfs,
-       COUNT(*) FILTER (WHERE t.data_emissao IS NULL)::int AS sem_emissao
-     FROM fato.titulo t
+       COUNT(DISTINCT t.codigo_titulo_omie) FILTER (WHERE t.codigo_cliente_omie IS NULL)::int AS clientes,
+       COUNT(DISTINCT t.codigo_titulo_omie) FILTER (WHERE t.codigo_projeto IS NULL)::int AS projetos,
+       COUNT(DISTINCT t.codigo_titulo_omie) FILTER (WHERE t.codigo_categoria IS NULL OR t.codigo_categoria='')::int AS categorias,
+       COUNT(DISTINCT t.codigo_titulo_omie) FILTER (WHERE t.codigo_departamento IS NULL OR t.codigo_departamento='')::int AS departamentos,
+       COUNT(DISTINCT t.codigo_titulo_omie) FILTER (WHERE t.numero_documento_fiscal IS NULL OR t.numero_documento_fiscal='')::int AS nfs,
+       COUNT(DISTINCT t.codigo_titulo_omie) FILTER (WHERE t.data_emissao IS NULL)::int AS sem_emissao
+     FROM ${TITULO_RATEADO} t
      WHERE COALESCE(t.data_vencimento, t.data_emissao, CURRENT_DATE) BETWEEN ${fromP}::date AND ${toP}::date
        ${extra}`,
     bind.values
@@ -1175,7 +1176,9 @@ export async function getBlankDocs(
       : field === "clientes"
         ? "t.codigo_cliente_omie IS NULL"
         : field === "categorias"
-          ? "t.codigo_categoria IS NULL OR t.codigo_categoria=''"
+          ? `(t.codigo_categoria IS NULL OR t.codigo_categoria='')
+             AND NOT EXISTS (SELECT 1 FROM fato.titulo_rateio_categoria r
+                             WHERE r.app_key=t.app_key AND r.codigo_titulo_omie=t.codigo_titulo_omie)`
           : field === "departamentos"
             ? "t.codigo_departamento IS NULL OR t.codigo_departamento=''"
             : "t.numero_documento_fiscal IS NULL OR t.numero_documento_fiscal=''";
@@ -1199,7 +1202,7 @@ export async function getBlankDocs(
      LEFT JOIN dim.empresa emp ON emp.app_key=t.app_key
      LEFT JOIN dim.cliente c ON c.app_key=t.app_key AND c.codigo_cliente_omie=t.codigo_cliente_omie
      LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria
-     WHERE ${where}
+     WHERE (${where})
        AND COALESCE(t.data_vencimento, t.data_emissao, CURRENT_DATE) BETWEEN ${fromP}::date AND ${toP}::date
        ${extra}
      ORDER BY t.valor_titulo DESC
@@ -1217,7 +1220,7 @@ export async function getInadimplenciaMensal(filter?: DimFilter) {
             CASE WHEN SUM(t.valor_titulo)=0 THEN 0
                  ELSE SUM(t.valor_aberto) FILTER (WHERE t.status='ATRASADO') / NULLIF(SUM(t.valor_titulo),0)
             END::float AS taxa
-     FROM fato.titulo t
+     FROM ${TITULO_RATEADO} t
      WHERE t.natureza='R' AND t.data_vencimento >= ${fromP}::date
        ${dimSql(b, filter, tituloCols())}
      GROUP BY 1
@@ -1237,9 +1240,9 @@ export async function getEntradasSaidas(from: string, to: string, filter?: DimFi
         : `COALESCE(c.razao_social,'(sem cadastro)')`;
     return query<NamedValue>(
       `SELECT ${name} AS nome,
-              COALESCE(SUM(bx.valor_baixa),0)::float AS valor
+              COALESCE(SUM(bx.valor_baixa * t.fator),0)::float AS valor
        FROM fato.baixa bx
-       JOIN fato.titulo t ON t.app_key=bx.app_key AND t.codigo_titulo_omie=bx.codigo_titulo_omie
+       JOIN ${TITULO_RATEADO} t ON t.app_key=bx.app_key AND t.codigo_titulo_omie=bx.codigo_titulo_omie
        LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria
        LEFT JOIN dim.cliente c ON c.app_key=t.app_key AND c.codigo_cliente_omie=t.codigo_cliente_omie
        WHERE t.natureza='${natureza}' AND bx.data_baixa BETWEEN ${fromP}::date AND ${toP}::date

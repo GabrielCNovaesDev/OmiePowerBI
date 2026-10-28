@@ -1,6 +1,7 @@
 import { query } from "./db";
 import { n } from "./format";
 import { Binder, dimSql, type DimFilter } from "./params";
+import { TITULO_RATEADO } from "./rateio";
 
 export type Empresa = {
   razao_social: string;
@@ -319,7 +320,7 @@ export async function getFluxoPorCategoria(filter?: DimFilter) {
             COALESCE(c.descricao, t.codigo_categoria, '(sem categoria)') AS descricao,
             COALESCE(SUM(t.valor_aberto) FILTER (WHERE t.natureza='R'),0)::float AS receber,
             COALESCE(SUM(t.valor_aberto) FILTER (WHERE t.natureza='P'),0)::float AS pagar
-     FROM fato.titulo t
+     FROM ${TITULO_RATEADO} t
      LEFT JOIN dim.categoria c ON c.app_key=t.app_key AND c.codigo=t.codigo_categoria
      WHERE t.status NOT IN ('CANCELADO','PAGO','RECEBIDO','LIQUIDADO') AND t.valor_aberto > 0
        ${dimSql(b, filter, { appKey: "t.app_key", cliente: "t.codigo_cliente_omie", categoria: "t.codigo_categoria", conta: "t.codigo_cc_omie", departamento: "t.codigo_departamento" })}

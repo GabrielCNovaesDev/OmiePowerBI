@@ -8,13 +8,16 @@ Detalhes técnicos em [analise-tecnica.md](analise-tecnica.md).
 - [x] Workflow acusa falha quando a carga falha
 - [x] Logs sem dados financeiros (repo público)
 - [x] Excluídos/estornados na Omie saem do BI
-- [ ] Publicar (commit/push) e acompanhar a primeira carga das 03:00
+- [x] Publicado; primeira carga em produção: 12 min, sem erros (28/10)
+- [ ] Confirmar que a carga automática das 03:00 rodou sozinha
 
 ## Bater com o ERP Omie (prioridade)
-- [ ] Conferir Contas a Receber / Pagar (DIPRIMO, um mês fechado)
-- [ ] Conferir extrato e saldo das contas
-- [ ] Conferir resultado por categoria (rateio, transferências)
-- [ ] Corrigir a reconciliação automática (métrica errada do resumo)
+- [x] Base de dados DI PRIMO = ERP (títulos, contas, saldos, cadastros) — 28/10
+- [x] Reconciliação automática com as regras do Resumo Omie (diferença zero nas 2 empresas)
+- [x] Telas por categoria usam o rateio de categoria (títulos e extrato)
+- [x] Relatório Diário: saídas somavam no saldo em vez de subtrair
+- [ ] Conferir cada tela do BI contra o relatório do ERP equivalente
+- [ ] Repetir a conferência no Instituto LM (depois — prioridade é a DI PRIMO)
 
 ## Ajustes de tela
 - [ ] Resumo: total a pagar e total a receber
@@ -26,6 +29,7 @@ Detalhes técnicos em [analise-tecnica.md](analise-tecnica.md).
 - [ ] Papel "desenvolvedor": só ele vê Qualidade & Sync
 
 ## Segurança e limpeza
+- [x] Check Panel mostrava pendências de outras empresas (filtro sem parênteses)
 - [ ] Repo público: apagar logs antigos do Actions e remover `prints/`
 - [ ] Sessão expira na hora ao desativar/rebaixar usuário
 - [ ] Demais itens da revisão (analise-tecnica.md, seção 6)
