@@ -16,6 +16,9 @@ const APP_CONCURRENCY = Number(process.env.SYNC_APP_CONCURRENCY) || 4;
 const EXTRATO_CONCURRENCY = Number(process.env.SYNC_EXTRATO_CONCURRENCY) || 1;
 // JSON bruto das respostas em stg.api_response: só quando pedido (debug).
 const SAVE_STAGING = process.env.SYNC_SAVE_STAGING === "1";
+// Meses de extrato recarregados a cada execução. Meses mais antigos ficam como
+// estão; para carregar o histórico uma vez, rode com SYNC_EXTRATO_MONTHS=36.
+const EXTRATO_MONTHS = Number(process.env.SYNC_EXTRATO_MONTHS) || 12;
 // Não apaga títulos sumidos se a varredura trouxe menos que esta fração do que já existe.
 const PURGE_MIN_RATIO = 0.5;
 
@@ -440,7 +443,7 @@ const APP_STEPS = [
   ["departamentos", syncDepartamentos],
   ["clientes", syncClientes],
   ["titulos", syncTitulos],
-  ["extrato", () => syncExtrato(12)],
+  ["extrato", () => syncExtrato(EXTRATO_MONTHS)],
   ["orcamentos", () => syncOrcamentos(12)],
   ["resumo", syncResumo],
 ];

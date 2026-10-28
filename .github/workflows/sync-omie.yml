@@ -10,6 +10,10 @@ on:
         description: "App Key Omie (vazio = todas as empresas ativas)"
         required: false
         default: ""
+      extrato_meses:
+        description: "Meses de extrato a recarregar (vazio = 12; use 36 uma vez para o histórico)"
+        required: false
+        default: ""
 
 # Nunca duas cargas ao mesmo tempo; um disparo novo espera o atual terminar.
 concurrency:
@@ -33,6 +37,7 @@ jobs:
           APP_ENCRYPTION_KEY: ${{ secrets.APP_ENCRYPTION_KEY }}
           TZ: America/Sao_Paulo
           APP_KEY_INPUT: ${{ github.event.inputs.app_key }}
+          SYNC_EXTRATO_MONTHS: ${{ github.event.inputs.extrato_meses }}
         run: |
           if [ -n "$APP_KEY_INPUT" ]; then
             node scripts/load-full.js "$APP_KEY_INPUT"

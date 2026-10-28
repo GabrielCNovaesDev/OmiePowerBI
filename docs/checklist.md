@@ -19,10 +19,15 @@ Detalhes técnicos em [analise-tecnica.md](analise-tecnica.md).
 - [ ] Conferir cada tela do BI contra o relatório do ERP equivalente
   - [x] Resumo
   - [x] Fluxo de Caixa realizado (set/2026: 50/50 categorias)
-  - [ ] DRE
-  - [ ] Receitas / Custos / Despesas
+  - [~] DRE — mantida em caixa; regras do Omie levantadas, implementação no backlog
+  - [x] Receitas / Custos / Despesas e Resultados (= Recebimentos/Pagamentos realizados do ERP, out/25–out/26)
+  - [ ] Carga única do histórico do extrato (36 meses) para os meses antes de out/2025
   - [ ] Contas a pagar / receber (telas)
 - [ ] Repetir a conferência no Instituto LM (depois — prioridade é a DI PRIMO)
+
+## Depois (backlog)
+- [ ] DRE por competência, igual ao Omie ([backlog](backlog-endpoints.md))
+- [ ] Novos endpoints: NF-e, NFS-e, vendas, produtos, estoque/CMC, compras, contratos, vendedores, projetos
 
 ## Ajustes de tela
 - [ ] Resumo: total a pagar e total a receber

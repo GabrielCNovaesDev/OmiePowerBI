@@ -57,6 +57,36 @@ export const TITULO_RATEADO = `(
     ON r.app_key = t0.app_key AND r.codigo_titulo_omie = t0.codigo_titulo_omie AND r.n > 1
 )`;
 
+// Valores realizados em regime de caixa, como nos relatórios "Recebimentos
+// realizados" e "Pagamentos realizados" da Omie: baixas de títulos (na conta e
+// data da baixa) + lançamentos feitos direto na conta corrente, sem título.
+// Transferências e movimentos "Previsto" do extrato não entram aqui; quem filtra
+// transferência é a consulta (pela categoria). `valor` é sempre positivo;
+// `natureza` é R (entrada) ou P (saída).
+export function movimentoRealizado(): string {
+  return `(
+  SELECT t.app_key, b.data_baixa AS data, t.natureza::text AS natureza,
+         b.valor_baixa * t.fator AS valor,
+         t.codigo_categoria, t.codigo_cliente_omie, b.codigo_cc_omie,
+         t.codigo_departamento, t.codigo_projeto, t.status::text AS status
+  FROM fato.baixa b
+  JOIN ${TITULO_RATEADO} t ON t.app_key = b.app_key AND t.codigo_titulo_omie = b.codigo_titulo_omie
+  UNION ALL
+  SELECT e.app_key, e.data_lancamento, CASE WHEN e.natureza = 'E' THEN 'R' ELSE 'P' END,
+         ABS(e.valor_documento),
+         e.codigo_categoria, e.codigo_cliente_omie, e.codigo_cc_omie,
+         NULL::varchar, NULL::bigint, 'CONTA CORRENTE'
+  FROM ${EXTRATO_RATEADO} e
+  WHERE COALESCE(e.codigo_lancamento, 0) <> 0
+    AND e.natureza IN ('E', 'S')
+    AND COALESCE(e.situacao, '') <> 'Previsto'
+    AND NOT EXISTS (
+      SELECT 1 FROM fato.baixa x
+      WHERE x.app_key = e.app_key AND x.codigo_lancamento_cc = e.codigo_lancamento
+    )
+)`;
+}
+
 // O movimento do extrato é ligado ao título pela baixa (codigo_lancamento_cc).
 // Só divide quando o movimento paga um único título rateado; pagamentos em lote
 // de vários títulos ficam como vieram da Omie.
