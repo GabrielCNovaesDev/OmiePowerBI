@@ -61,6 +61,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   let tenantName = session.user.name || session.user.email || "";
   let papel = session.user.papel;
   let hiddenRoutes: string[] = papel === "desenvolvedor" ? [] : [ROTA_DESENVOLVEDOR];
+  let hiddenPorEmpresa: Record<string, string[]> = {};
 
   if (isAdminPath) {
     return (
@@ -79,7 +80,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     tenantName = tenant.nome;
     papel = tenant.papel;
     company = tenantLabel(tenant);
-    hiddenRoutes = rotasOcultas(tenant.modulosDesativados, tenant.papel === "desenvolvedor");
+    // O layout raiz não re-renderiza quando só muda ?empresa=, então o menu recebe
+    // as rotas ocultas de cada empresa e do consolidado e escolhe no cliente.
+    const dev = tenant.papel === "desenvolvedor";
+    hiddenRoutes = rotasOcultas([...new Set(tenant.empresas.flatMap((e) => e.modulos_desativados ?? []))], dev);
+    hiddenPorEmpresa = Object.fromEntries(
+      tenant.empresas.map((e) => [e.app_key, rotasOcultas(e.modulos_desativados ?? [], dev)])
+    );
     const filter = { appKeys: tenant.selectedKeys };
     const b = new Binder();
     const rows = await query<{ ts: string; status: string; metodo: string }>(
@@ -118,6 +125,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             userName={tenantName}
             papel={papel}
             hiddenRoutes={hiddenRoutes}
+            hiddenPorEmpresa={hiddenPorEmpresa}
           >
             {children}
           </Shell>

@@ -13,6 +13,7 @@ export function Shell({
   userName,
   papel,
   hiddenRoutes = [],
+  hiddenPorEmpresa = {},
 }: {
   children: React.ReactNode;
   company?: string | null;
@@ -21,6 +22,7 @@ export function Shell({
   userName?: string | null;
   papel?: string | null;
   hiddenRoutes?: string[];
+  hiddenPorEmpresa?: Record<string, string[]>;
 }) {
   return (
     <div className="min-h-screen bg-bg">
@@ -29,7 +31,7 @@ export function Shell({
           <BrandMark />
         </div>
         <div className="min-w-0 flex-1">
-          <DashTabs hidden={hiddenRoutes} />
+          <DashTabs hidden={hiddenRoutes} porEmpresa={hiddenPorEmpresa} />
         </div>
         <div className="ml-auto text-right text-[11px] text-white/60">
           <EmpresaPicker
@@ -43,7 +45,7 @@ export function Shell({
       </header>
       <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr]">
         <aside className="bg-header px-4 py-5 lg:min-h-[calc(100vh-64px)]">
-          <ReportNav hidden={hiddenRoutes} />
+          <ReportNav hidden={hiddenRoutes} porEmpresa={hiddenPorEmpresa} />
           <div className="mt-8">
             <FilterRail options={filterOptions} />
           </div>

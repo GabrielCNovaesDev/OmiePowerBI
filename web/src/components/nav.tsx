@@ -37,9 +37,18 @@ function hrefKeepFilters(path: string, search: URLSearchParams) {
   return q ? `${path}?${q}` : path;
 }
 
-export function DashTabs({ hidden = [] }: { hidden?: string[] }) {
+type NavProps = { hidden?: string[]; porEmpresa?: Record<string, string[]> };
+
+// Rotas ocultas da empresa escolhida na URL; sem empresa (ou inválida), as do consolidado.
+function rotasOcultasDaUrl(searchParams: URLSearchParams, hidden: string[], porEmpresa: Record<string, string[]>) {
+  const empresa = searchParams.get("empresa");
+  return (empresa && porEmpresa[empresa]) || hidden;
+}
+
+export function DashTabs({ hidden: base = [], porEmpresa = {} }: NavProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const hidden = rotasOcultasDaUrl(searchParams, base, porEmpresa);
   return (
     <nav className="flex flex-wrap items-center gap-1">
       {DASHBOARDS.filter((item) => !hidden.includes(item.href)).map((item) => {
@@ -61,9 +70,10 @@ export function DashTabs({ hidden = [] }: { hidden?: string[] }) {
   );
 }
 
-export function ReportNav({ hidden = [] }: { hidden?: string[] }) {
+export function ReportNav({ hidden: base = [], porEmpresa = {} }: NavProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const hidden = rotasOcultasDaUrl(searchParams, base, porEmpresa);
   return (
     <div>
       <p className="mb-2 px-1 text-[10px] uppercase tracking-[0.16em] text-white/40">Relatórios</p>
