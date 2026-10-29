@@ -6,6 +6,7 @@ export type ModuloId =
   | "saldo"
   | "fluxo"
   | "fluxo_previsto"
+  | "fluxo_livre"
   | "resultado"
   | "dre"
   | "previsto"
@@ -41,6 +42,7 @@ export const MODULOS: Modulo[] = [
     grupo: "Dashboards",
     descricao: "Modos Previsto e Atual + Previsto dentro do Fluxo de Caixa",
   },
+  { id: "fluxo_livre", label: "Fluxo de Caixa Livre", grupo: "Dashboards", href: "/fluxo-livre" },
   { id: "resultado", label: "Resultados", grupo: "Dashboards", href: "/resultado" },
   { id: "dre", label: "DRE", grupo: "Dashboards", href: "/dre" },
   { id: "previsto", label: "Previsto x Realizado", grupo: "Dashboards", href: "/previsto" },
@@ -62,8 +64,6 @@ export const MODULOS: Modulo[] = [
 const IDS = new Set<string>(MODULOS.map((m) => m.id));
 
 export const ROTA_DESENVOLVEDOR = "/sync";
-// Telas em teste: só admin/desenvolvedor.
-export const ROTAS_STAFF = ["/fluxo-livre"];
 
 export function isModuloId(value: string): value is ModuloId {
   return IDS.has(value);
@@ -75,10 +75,9 @@ export function moduloDaRota(pathname: string): ModuloId | null {
 }
 
 // Rotas que o menu deve esconder para o usuário atual.
-export function rotasOcultas(desativados: string[], desenvolvedor: boolean, staff: boolean): string[] {
+export function rotasOcultas(desativados: string[], desenvolvedor: boolean): string[] {
   const off = new Set(desativados);
   const rotas = MODULOS.filter((m) => m.href && off.has(m.id)).map((m) => m.href!);
   if (!desenvolvedor) rotas.push(ROTA_DESENVOLVEDOR);
-  if (!staff) rotas.push(...ROTAS_STAFF);
   return rotas;
 }

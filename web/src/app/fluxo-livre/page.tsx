@@ -21,7 +21,7 @@ export default async function FluxoLivrePage({
   return (
     <div className="space-y-4">
       <PageHeader
-        kicker="Em teste"
+        kicker="Dashboards"
         title="Fluxo de Caixa Livre"
         subtitle={`${ano} · realizado do extrato + a realizar dos títulos em aberto pela previsão`}
       />

@@ -2,8 +2,7 @@ import { resolvePeriod, type PeriodBounds } from "./period";
 import { auth } from "@/auth";
 import { resolveTenant, type Tenant } from "./tenant";
 import { oneParam, parseContaParam, TIPO_CONTA_CODES } from "./params-shared";
-import { moduloDaRota, ROTA_DESENVOLVEDOR, ROTAS_STAFF } from "./modulos";
-import { podeAdministrar } from "@/auth.config";
+import { moduloDaRota, ROTA_DESENVOLVEDOR } from "./modulos";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 
@@ -17,7 +16,6 @@ async function garantirAcessoTela(tenant: Tenant) {
     return;
   }
   if (pathname === ROTA_DESENVOLVEDOR && tenant.papel !== "desenvolvedor") notFound();
-  if (ROTAS_STAFF.includes(pathname) && !podeAdministrar(tenant.papel)) notFound();
   const modulo = moduloDaRota(pathname);
   if (modulo && tenant.modulosDesativados.includes(modulo)) notFound();
 }

@@ -9,8 +9,7 @@ import { query } from "@/lib/db";
 import { auth } from "@/auth";
 import { empresaFromHeaders, resolveTenant, tenantLabel } from "@/lib/tenant";
 import { Binder, dimSql } from "@/lib/params";
-import { ROTA_DESENVOLVEDOR, ROTAS_STAFF, rotasOcultas } from "@/lib/modulos";
-import { podeAdministrar } from "@/auth.config";
+import { ROTA_DESENVOLVEDOR, rotasOcultas } from "@/lib/modulos";
 import type { FilterOptions } from "@/components/filters";
 import "./globals.css";
 
@@ -61,7 +60,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   let filterOptions: FilterOptions | null = null;
   let tenantName = session.user.name || session.user.email || "";
   let papel = session.user.papel;
-  let hiddenRoutes: string[] = papel === "desenvolvedor" ? [] : [ROTA_DESENVOLVEDOR, ...(podeAdministrar(papel) ? [] : ROTAS_STAFF)];
+  let hiddenRoutes: string[] = papel === "desenvolvedor" ? [] : [ROTA_DESENVOLVEDOR];
 
   if (isAdminPath) {
     return (
@@ -80,7 +79,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     tenantName = tenant.nome;
     papel = tenant.papel;
     company = tenantLabel(tenant);
-    hiddenRoutes = rotasOcultas(tenant.modulosDesativados, tenant.papel === "desenvolvedor", podeAdministrar(tenant.papel));
+    hiddenRoutes = rotasOcultas(tenant.modulosDesativados, tenant.papel === "desenvolvedor");
     const filter = { appKeys: tenant.selectedKeys };
     const b = new Binder();
     const rows = await query<{ ts: string; status: string; metodo: string }>(
