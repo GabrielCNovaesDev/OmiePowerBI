@@ -149,7 +149,7 @@ export async function getRanking(natureza: "R" | "P", limit = 10, filter?: DimFi
      WHERE t.natureza=${nat}
        AND t.status::text NOT IN ('CANCELADO', CASE WHEN ${nat}='R' THEN 'RECEBIDO' ELSE 'PAGO' END, 'LIQUIDADO')
        AND t.valor_aberto > 0
-       ${dimSql(b, filter, { appKey: "t.app_key", cliente: "t.codigo_cliente_omie", categoria: "t.codigo_categoria", conta: "t.codigo_cc_omie", departamento: "t.codigo_departamento" })}
+       ${dimSql(b, filter, { appKey: "t.app_key", cliente: "t.codigo_cliente_omie", categoria: "t.codigo_categoria", conta: "t.codigo_cc_omie", departamento: "t.codigo_departamento", contaPadrao: "todas" })}
      GROUP BY c.razao_social, c.cnpj_cpf
      ORDER BY valor DESC
      LIMIT ${lim}`,
@@ -212,7 +212,7 @@ export async function getTitulos(natureza: "R" | "P", limit = 80, filter?: DimFi
   const rows = await query<Record<string, unknown>>(
     `${TITULO_SELECT}
      WHERE t.natureza=${nat}
-       ${dimSql(b, filter, { appKey: "t.app_key", cliente: "t.codigo_cliente_omie", categoria: "t.codigo_categoria", conta: "t.codigo_cc_omie", departamento: "t.codigo_departamento" })}
+       ${dimSql(b, filter, { appKey: "t.app_key", cliente: "t.codigo_cliente_omie", categoria: "t.codigo_categoria", conta: "t.codigo_cc_omie", departamento: "t.codigo_departamento", contaPadrao: "todas" })}
      ORDER BY
        CASE WHEN t.status IN ('ATRASADO') THEN 0
             WHEN t.status IN ('VENCEHOJE','AVENCER','EMABERTO','PAGTO_PARCIAL') THEN 1
@@ -261,6 +261,7 @@ export async function getTitulosDrill(opts: {
     categoria: "t.codigo_categoria",
     conta: "t.codigo_cc_omie",
     departamento: "t.codigo_departamento",
+    contaPadrao: "todas",
   });
   if (dims) parts.push(dims);
   const where = parts.filter(Boolean).join(" ");
@@ -326,7 +327,7 @@ export async function getFluxoPorCategoria(filter?: DimFilter) {
      FROM ${TITULO_RATEADO} t
      LEFT JOIN dim.categoria c ON c.app_key=t.app_key AND c.codigo=t.codigo_categoria
      WHERE t.status NOT IN ('CANCELADO','PAGO','RECEBIDO','LIQUIDADO') AND t.valor_aberto > 0
-       ${dimSql(b, filter, { appKey: "t.app_key", cliente: "t.codigo_cliente_omie", categoria: "t.codigo_categoria", conta: "t.codigo_cc_omie", departamento: "t.codigo_departamento" })}
+       ${dimSql(b, filter, { appKey: "t.app_key", cliente: "t.codigo_cliente_omie", categoria: "t.codigo_categoria", conta: "t.codigo_cc_omie", departamento: "t.codigo_departamento", contaPadrao: "todas" })}
      GROUP BY 1,2
      ORDER BY (COALESCE(SUM(t.valor_aberto),0)) DESC
      LIMIT 12`,
@@ -432,7 +433,7 @@ export async function getStatusBreakdown(natureza: "R" | "P", filter?: DimFilter
     `SELECT status::text, COUNT(*)::int AS qtd, COALESCE(SUM(valor_aberto),0)::float AS valor
      FROM fato.titulo t
      WHERE natureza=${nat}
-       ${dimSql(b, filter, { appKey: "t.app_key", cliente: "t.codigo_cliente_omie", categoria: "t.codigo_categoria", conta: "t.codigo_cc_omie", departamento: "t.codigo_departamento" })}
+       ${dimSql(b, filter, { appKey: "t.app_key", cliente: "t.codigo_cliente_omie", categoria: "t.codigo_categoria", conta: "t.codigo_cc_omie", departamento: "t.codigo_departamento", contaPadrao: "todas" })}
      GROUP BY status
      ORDER BY valor DESC`,
     b.values

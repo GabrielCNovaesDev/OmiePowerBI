@@ -22,7 +22,8 @@ Detalhes técnicos em [analise-tecnica.md](analise-tecnica.md).
   - [~] DRE — mantida em caixa; regras do Omie levantadas, implementação no backlog
   - [x] Receitas / Custos / Despesas e Resultados = Recebimentos/Pagamentos realizados do ERP (histórico completo, fev/24–out/26)
   - [x] Carga única do histórico do extrato (36 meses) — 28/10, 25 min
-  - [x] Contas a pagar / receber (com "todas as contas": totais e faixas = ERP; tela abre com as Consideradas)
+  - [x] Contas a pagar / receber: totais e faixas = ERP
+  - [x] Títulos em aberto mostram todas as contas por padrão (o filtro "Consideradas" vale só para saldo, extrato e fluxo de caixa, como no Omie)
   - [x] Nomes com "&amp;" (entidades HTML da API) corrigidos na carga e no banco
 - [ ] Repetir a conferência no Instituto LM (depois — prioridade é a DI PRIMO)
 

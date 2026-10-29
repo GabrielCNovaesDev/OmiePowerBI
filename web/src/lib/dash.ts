@@ -74,6 +74,12 @@ function tituloCols() {
   };
 }
 
+// Títulos em aberto e listas de títulos: sem contas escolhidas, mostra todas
+// (o ERP lista contas a pagar/receber de qualquer conta). Ver dimSql.
+function tituloAbertoCols() {
+  return { ...tituloCols(), contaPadrao: "todas" as const };
+}
+
 export async function getSaldoAtual(filter?: DimFilter) {
   const b = new Binder();
   const rows = await query<Record<string, unknown>>(`
@@ -170,7 +176,7 @@ export async function getTitulosVencendo(
      WHERE t.natureza=${nat}
        AND t.valor_aberto > 0
        ${dateClause}
-       ${dimSql(b, filter, tituloCols())}
+       ${dimSql(b, filter, tituloAbertoCols())}
      GROUP BY 1,2,4,5
      ORDER BY ${orderBy}
      LIMIT 40`,
@@ -190,7 +196,7 @@ export async function getTotaisEmAberto(filter?: DimFilter) {
      FROM ${TITULO_RATEADO} t
      WHERE t.valor_aberto > 0
        AND ((t.natureza='R' AND t.status ${OPEN_R}) OR (t.natureza='P' AND t.status ${OPEN_P}))
-       ${dimSql(b, filter, tituloCols())}`,
+       ${dimSql(b, filter, tituloAbertoCols())}`,
     b.values
   );
   const r = rows[0] ?? {};
@@ -223,7 +229,7 @@ export async function getKpisPeriodo(from: string, to: string, filter?: DimFilte
       COUNT(DISTINCT t.codigo_titulo_omie) FILTER (WHERE natureza='R' AND status='ATRASADO')::int AS qtd_receber_atraso,
       COUNT(DISTINCT t.codigo_titulo_omie) FILTER (WHERE natureza='P' AND status='ATRASADO')::int AS qtd_pagar_atraso
     FROM ${TITULO_RATEADO} t
-    WHERE 1=1 ${dimSql(b, filter, tituloCols())}
+    WHERE 1=1 ${dimSql(b, filter, tituloAbertoCols())}
       AND (
         t.status = 'ATRASADO'
         OR (
@@ -892,7 +898,7 @@ export async function getAgingBi(natureza: "R" | "P", atrasado: boolean, filter?
      FROM ${TITULO_RATEADO} t
      WHERE t.natureza=${nat} AND t.valor_aberto > 0 AND t.status::text NOT IN ('CANCELADO','PAGO','RECEBIDO','LIQUIDADO')
        ${extra}
-       ${dimSql(b, filter, tituloCols())}
+       ${dimSql(b, filter, tituloAbertoCols())}
      GROUP BY 1`,
     b.values
   );
@@ -922,7 +928,7 @@ export async function getAgingByDim(
      WHERE t.natureza=${nat} AND t.valor_aberto > 0
        AND t.status ${openClause(natureza)}
        ${extra}
-       ${dimSql(b, filter, tituloCols())}
+       ${dimSql(b, filter, tituloAbertoCols())}
      GROUP BY 1
      ORDER BY valor DESC
      LIMIT 12`,
@@ -1153,7 +1159,7 @@ export async function getCheckPanel(from: string, to: string, filter?: DimFilter
   const bind = new Binder();
   const fromP = bind.add(from);
   const toP = bind.add(to);
-  const extra = dimSql(bind, filter, tituloCols());
+  const extra = dimSql(bind, filter, tituloAbertoCols());
   const blank = await query<Record<string, unknown>>(
     `SELECT
        COUNT(DISTINCT t.codigo_titulo_omie) FILTER (WHERE t.codigo_cliente_omie IS NULL)::int AS clientes,
@@ -1222,7 +1228,7 @@ export async function getBlankDocs(
   const b = new Binder();
   const fromP = b.add(from);
   const toP = b.add(to);
-  const extra = dimSql(b, filter, tituloCols());
+  const extra = dimSql(b, filter, tituloAbertoCols());
   return query<{
     cnpj: string | null;
     nf: string | null;
@@ -1259,7 +1265,7 @@ export async function getInadimplenciaMensal(filter?: DimFilter) {
             END::float AS taxa
      FROM ${TITULO_RATEADO} t
      WHERE t.natureza='R' AND t.data_vencimento >= ${fromP}::date
-       ${dimSql(b, filter, tituloCols())}
+       ${dimSql(b, filter, tituloAbertoCols())}
      GROUP BY 1
      ORDER BY 1`,
     b.values
@@ -1317,7 +1323,7 @@ export async function getNfs(from: string, to: string, filter?: DimFilter) {
      LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria
      WHERE t.numero_documento_fiscal IS NOT NULL AND t.numero_documento_fiscal <> ''
        AND COALESCE(t.data_emissao, t.data_vencimento) BETWEEN ${fromP}::date AND ${toP}::date
-       ${dimSql(b, filter, tituloCols())}
+       ${dimSql(b, filter, tituloAbertoCols())}
      ORDER BY t.data_emissao DESC NULLS LAST
      LIMIT 80`,
     b.values
@@ -1461,7 +1467,7 @@ export async function getAnaliseDesvios(
   const b = new Binder();
   const fromP = b.add(from);
   const toP = b.add(to);
-  const extra = dimSql(b, filter, tituloCols());
+  const extra = dimSql(b, filter, tituloAbertoCols());
   const natClause = natureza ? `AND t.natureza = ${b.add(natureza)}` : "";
   const docs = await query<DesvioDoc>(
     `SELECT t.numero_titulo AS numero,

@@ -67,10 +67,21 @@ export class Binder {
   }
 }
 
+// Sem contas escolhidas no filtro, o padrão é só as contas "Consideradas" para
+// Resumo e Fluxo de Caixa — vale para saldo, extrato e fluxo. Títulos em aberto
+// passam `contaPadrao: "todas"`: a conta de um título é só onde ele deve ser
+// pago/recebido, e o ERP lista todos eles, em qualquer conta.
 export function dimSql(
   b: Binder,
   filter: DimFilter | undefined,
-  cols: { appKey?: string; cliente?: string; categoria?: string; conta?: string; departamento?: string }
+  cols: {
+    appKey?: string;
+    cliente?: string;
+    categoria?: string;
+    conta?: string;
+    departamento?: string;
+    contaPadrao?: "consideradas" | "todas";
+  }
 ): string {
   const parts: string[] = [];
   if (cols.appKey) {
@@ -84,7 +95,7 @@ export function dimSql(
   if (cols.conta && filter.contas?.length) {
     const ids = filter.contas.map((c) => Number(c)).filter((n) => Number.isFinite(n) && n > 0);
     if (ids.length) parts.push(`${cols.conta} = ANY(${b.add(ids)}::bigint[])`);
-  } else if (cols.conta && !filter.contasTodas) {
+  } else if (cols.conta && !filter.contasTodas && cols.contaPadrao !== "todas") {
     const appMatch = cols.appKey ? ` AND cc_vis.app_key = ${cols.appKey}` : "";
     parts.push(
       `${cols.conta} IN (
