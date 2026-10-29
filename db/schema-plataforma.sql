@@ -76,6 +76,21 @@ ALTER TYPE auth.papel ADD VALUE IF NOT EXISTS 'desenvolvedor';
 -- Telas desligadas por empresa (ids de web/src/lib/modulos.ts). Vazio = tudo ligado.
 ALTER TABLE ops.aplicativo ADD COLUMN IF NOT EXISTS modulos_desativados TEXT[] NOT NULL DEFAULT '{}';
 
+-- De/para das categorias Omie para o Fluxo de Caixa Livre, por empresa.
+-- classificacao: FLUXO DA OPERAÇÃO | FLUXO DA DÍVIDA | FLUXO DO INVESTIMENTO | FLUXO DA DISTRIBUIÇÃO
+-- tipo: ENTRADAS | SAÍDAS (separa Recebimentos x Pagamentos na operação).
+-- Carga: scripts/importar-depara-fluxo.js
+CREATE TABLE IF NOT EXISTS ops.categoria_fluxo (
+    app_key            VARCHAR(40) NOT NULL,
+    codigo_categoria   VARCHAR(20) NOT NULL,
+    classificacao      TEXT        NOT NULL,
+    subgrupo           TEXT        NOT NULL,
+    categoria_ajustada TEXT        NOT NULL,
+    tipo               TEXT,
+    updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (app_key, codigo_categoria)
+);
+
 DROP TRIGGER IF EXISTS trg_aplicativo_updated_at ON ops.aplicativo;
 CREATE TRIGGER trg_aplicativo_updated_at
     BEFORE UPDATE ON ops.aplicativo

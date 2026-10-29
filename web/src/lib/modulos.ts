@@ -62,6 +62,8 @@ export const MODULOS: Modulo[] = [
 const IDS = new Set<string>(MODULOS.map((m) => m.id));
 
 export const ROTA_DESENVOLVEDOR = "/sync";
+// Telas em teste: só admin/desenvolvedor.
+export const ROTAS_STAFF = ["/fluxo-livre"];
 
 export function isModuloId(value: string): value is ModuloId {
   return IDS.has(value);
@@ -73,9 +75,10 @@ export function moduloDaRota(pathname: string): ModuloId | null {
 }
 
 // Rotas que o menu deve esconder para o usuário atual.
-export function rotasOcultas(desativados: string[], desenvolvedor: boolean): string[] {
+export function rotasOcultas(desativados: string[], desenvolvedor: boolean, staff: boolean): string[] {
   const off = new Set(desativados);
   const rotas = MODULOS.filter((m) => m.href && off.has(m.id)).map((m) => m.href!);
   if (!desenvolvedor) rotas.push(ROTA_DESENVOLVEDOR);
+  if (!staff) rotas.push(...ROTAS_STAFF);
   return rotas;
 }

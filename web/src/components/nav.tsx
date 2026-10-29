@@ -9,6 +9,7 @@ export const DASHBOARDS = [
   { href: "/", label: "Resumo" },
   { href: "/saldo", label: "Saldo" },
   { href: "/fluxo", label: "F. Caixa" },
+  { href: "/fluxo-livre", label: "FCL (teste)" },
   { href: "/resultado", label: "Resultados" },
   { href: "/dre", label: "DRE" },
   { href: "/previsto", label: "Prev. x Real." },
