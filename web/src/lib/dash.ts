@@ -14,7 +14,7 @@ function openClause(natureza: "R" | "P") {
   return natureza === "R" ? OPEN_R : OPEN_P;
 }
 
-export type NamedValue = { nome: string; valor: number; qtd?: number };
+export type NamedValue = { nome: string; valor: number; qtd?: number; cnpj?: string | null };
 export type MonthCash = {
   mes: string;
   label: string;
@@ -45,6 +45,7 @@ export type DailyPoint = {
 export type TituloHoje = {
   categoria: string | null;
   cliente: string | null;
+  cnpj: string | null;
   nf: string | null;
   vencimento: string | null;
   qtd: number;
@@ -93,8 +94,8 @@ export async function getSaldoAtual(filter?: DimFilter) {
 
 export async function getSaldoPorConta(filter?: DimFilter) {
   const b = new Binder();
-  return query<{ conta: string; saldo: number; previsto: number; disponivel: number }>(
-    `SELECT cc.descricao AS conta,
+  return query<{ conta: string; codigo_banco: string | null; saldo: number; previsto: number; disponivel: number }>(
+    `SELECT cc.descricao AS conta, cc.codigo_banco,
             COALESCE(s.saldo_atual,0)::float AS saldo,
             COALESCE(s.saldo_atual_previsto,0)::float AS previsto,
             COALESCE(s.saldo_disponivel, s.saldo_atual + s.limite_credito_total, 0)::float AS disponivel
@@ -116,9 +117,9 @@ export async function getSaldoEvolucaoMensal(from: string, to: string, filter?: 
   const b = new Binder();
   const fromP = b.add(from);
   const toP = b.add(to);
-  const rows = await query<{ mes: string; conta: string; saldo: number }>(
+  const rows = await query<{ mes: string; conta: string; codigo_banco: string | null; saldo: number }>(
     `SELECT to_char(date_trunc('month', s.data_referencia), 'YYYY-MM') AS mes,
-            cc.descricao AS conta,
+            cc.descricao AS conta, MAX(cc.codigo_banco) AS codigo_banco,
             (ARRAY_AGG(s.saldo_atual ORDER BY s.data_referencia DESC))[1]::float AS saldo
      FROM fato.saldo_conta_corrente s
      JOIN dim.conta_corrente cc ON cc.app_key=s.app_key AND cc.codigo_cc_omie=s.codigo_cc_omie
@@ -155,6 +156,7 @@ export async function getTitulosVencendo(
   return query<TituloHoje>(
     `SELECT COALESCE(cat.descricao, t.codigo_categoria, '(sem categoria)') AS categoria,
             COALESCE(c.razao_social, '(sem cadastro)') AS cliente,
+            MAX(c.cnpj_cpf) AS cnpj,
             t.numero_documento_fiscal AS nf,
             t.data_vencimento::text AS vencimento,
             COUNT(DISTINCT t.codigo_titulo_omie)::int AS qtd,
@@ -166,11 +168,30 @@ export async function getTitulosVencendo(
        AND t.valor_aberto > 0
        ${dateClause}
        ${dimSql(b, filter, tituloCols())}
-     GROUP BY 1,2,3,4
+     GROUP BY 1,2,4,5
      ORDER BY ${orderBy}
      LIMIT 40`,
     b.values
   );
+}
+
+// Tudo o que está em aberto (atrasado + a vencer), sem recorte de data.
+export async function getTotaisEmAberto(filter?: DimFilter) {
+  const b = new Binder();
+  const rows = await query<Record<string, unknown>>(
+    `SELECT
+       COALESCE(SUM(t.valor_aberto) FILTER (WHERE t.natureza='R'),0)::float AS receber,
+       COALESCE(SUM(t.valor_aberto) FILTER (WHERE t.natureza='P'),0)::float AS pagar,
+       COUNT(DISTINCT t.codigo_titulo_omie) FILTER (WHERE t.natureza='R')::int AS qtd_receber,
+       COUNT(DISTINCT t.codigo_titulo_omie) FILTER (WHERE t.natureza='P')::int AS qtd_pagar
+     FROM ${TITULO_RATEADO} t
+     WHERE t.valor_aberto > 0
+       AND ((t.natureza='R' AND t.status ${OPEN_R}) OR (t.natureza='P' AND t.status ${OPEN_P}))
+       ${dimSql(b, filter, tituloCols())}`,
+    b.values
+  );
+  const r = rows[0] ?? {};
+  return { receber: n(r.receber), pagar: n(r.pagar), qtdReceber: n(r.qtd_receber), qtdPagar: n(r.qtd_pagar) };
 }
 
 export async function getKpisDia(filter?: DimFilter) {
@@ -889,6 +910,7 @@ export async function getAgingByDim(
   const nat = b.add(natureza);
   return query<NamedValue>(
     `SELECT ${nameExpr} AS nome,
+            ${dim === "cliente" ? "MAX(c.cnpj_cpf)" : "NULL"} AS cnpj,
             COALESCE(SUM(t.valor_aberto),0)::float AS valor,
             COUNT(DISTINCT t.codigo_titulo_omie)::int AS qtd
      FROM ${TITULO_RATEADO} t
@@ -958,7 +980,7 @@ export async function getBreakdown(kind: Kind, from: string, to: string, base: "
     query<NamedValue>(`SELECT COALESCE(c.cnpj_cpf, '(sem CNPJ)') AS nome, COALESCE(SUM(${valueCol}),0)::float AS valor ${join} GROUP BY 1 ORDER BY valor DESC LIMIT 8`, b.values),
     query<NamedValue>(`SELECT t.status::text AS nome, COALESCE(SUM(${valueCol}),0)::float AS valor ${join} GROUP BY 1 ORDER BY valor DESC`, b.values),
     query<NamedValue>(`SELECT COALESCE(NULLIF(c.estado,''), '(sem UF)') AS nome, COALESCE(SUM(${valueCol}),0)::float AS valor ${join} GROUP BY 1 ORDER BY valor DESC`, b.values),
-    query<NamedValue>(`SELECT COALESCE(c.razao_social,'(sem cadastro)') AS nome, COALESCE(SUM(${valueCol}),0)::float AS valor ${join} GROUP BY 1 ORDER BY valor DESC LIMIT 15`, b.values),
+    query<NamedValue>(`SELECT COALESCE(c.razao_social,'(sem cadastro)') AS nome, MAX(c.cnpj_cpf) AS cnpj, COALESCE(SUM(${valueCol}),0)::float AS valor ${join} GROUP BY 1 ORDER BY valor DESC LIMIT 15`, b.values),
     query<NamedValue>(`SELECT COALESCE(cat.descricao, t.codigo_categoria, '(sem categoria)') AS nome, COALESCE(SUM(${valueCol}),0)::float AS valor ${join} GROUP BY 1 ORDER BY valor DESC LIMIT 12`, b.values),
     query<NamedValue>(`SELECT COALESCE(t.codigo_projeto::text, '(em branco)') AS nome, COALESCE(SUM(${valueCol}),0)::float AS valor ${join} GROUP BY 1 ORDER BY valor DESC LIMIT 8`, b.values),
   ]);
@@ -1076,6 +1098,7 @@ export async function getQaClientes(from: string, to: string, filter?: DimFilter
   const cTo = currentB.add(to);
   const current = await query<NamedValue>(
     `SELECT COALESCE(c.razao_social,'(sem cadastro)') AS nome,
+            MAX(c.cnpj_cpf) AS cnpj,
             COALESCE(SUM(t.valor),0)::float AS valor
      FROM ${MOVIMENTO_REALIZADO} t
      LEFT JOIN dim.cliente c ON c.app_key=t.app_key AND c.codigo_cliente_omie=t.codigo_cliente_omie
@@ -1092,6 +1115,7 @@ export async function getQaClientes(from: string, to: string, filter?: DimFilter
   const pTo = prevB.add(prevTo);
   const previous = await query<NamedValue>(
     `SELECT COALESCE(c.razao_social,'(sem cadastro)') AS nome,
+            MAX(c.cnpj_cpf) AS cnpj,
             COALESCE(SUM(t.valor),0)::float AS valor
      FROM ${MOVIMENTO_REALIZADO} t
      LEFT JOIN dim.cliente c ON c.app_key=t.app_key AND c.codigo_cliente_omie=t.codigo_cliente_omie
@@ -1105,7 +1129,7 @@ export async function getQaClientes(from: string, to: string, filter?: DimFilter
     .map((c) => {
       const before = prevMap.get(c.nome) ?? 0;
       const growth = before === 0 ? (n(c.valor) > 0 ? 100 : 0) : ((n(c.valor) - before) / before) * 100;
-      return { nome: c.nome, valor: n(c.valor), growth };
+      return { nome: c.nome, cnpj: c.cnpj ?? null, valor: n(c.valor), growth };
     })
     .filter((x) => x.valor > 0);
   return {
@@ -1250,6 +1274,7 @@ export async function getEntradasSaidas(from: string, to: string, filter?: DimFi
         : `COALESCE(c.razao_social,'(sem cadastro)')`;
     return query<NamedValue>(
       `SELECT ${name} AS nome,
+              ${by === "cli" ? "MAX(c.cnpj_cpf)" : "NULL"} AS cnpj,
               COALESCE(SUM(t.valor),0)::float AS valor
        FROM ${MOVIMENTO_REALIZADO} t
        LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria

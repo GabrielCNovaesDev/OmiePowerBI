@@ -23,8 +23,9 @@ export default async function FluxoPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const { period, filter, raw } = await readParams(searchParams);
-  const modo = oneParam(raw, "modo") || "atual";
+  const { period, filter, raw, tenant } = await readParams(searchParams);
+  const comPrevisto = !tenant.modulosDesativados.includes("fluxo_previsto");
+  const modo = comPrevisto ? oneParam(raw, "modo") || "atual" : "atual";
 
   if (modo === "previsto") {
     const to = cashForecastTo(period);
@@ -83,7 +84,7 @@ export default async function FluxoPage({
   return (
     <div className="space-y-4">
       <PageHeader kicker="Dashboards" title="Fluxo de Caixa" subtitle={`${period.label} · realizado de extrato/baixas Omie`} />
-      <ModeSwitch current="atual" raw={raw} />
+      {comPrevisto ? <ModeSwitch current="atual" raw={raw} /> : null}
       <FluxoResumo title="Fluxo de Caixa Atual" months={months} />
       <FluxoDrilldown months={months} nodes={nodes} />
     </div>

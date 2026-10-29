@@ -1,3 +1,4 @@
+import { barrasComLogo } from "@/lib/marcas";
 import { HBarChart } from "@/components/charts";
 import type { DiarioCtx } from "@/components/diario/ctx";
 import { Card } from "@/components/ui";
@@ -17,7 +18,7 @@ export async function DiarioMovimentos({ ctx }: { ctx: DiarioCtx }) {
         </Card>
         <Card>
           <p className="mb-2 text-sm font-semibold">Recebido por cliente</p>
-          <HBarChart data={recCat.recCli.map((x) => ({ name: x.nome, value: Number(x.valor) }))} />
+          <HBarChart data={barrasComLogo(recCat.recCli)} />
         </Card>
         <Card>
           <p className="mb-2 text-sm font-semibold">Pago por categoria</p>
@@ -25,7 +26,7 @@ export async function DiarioMovimentos({ ctx }: { ctx: DiarioCtx }) {
         </Card>
         <Card>
           <p className="mb-2 text-sm font-semibold">Pago por fornecedor</p>
-          <HBarChart data={recCat.pagForn.map((x) => ({ name: x.nome, value: Number(x.valor) }))} color="#e06a6a" />
+          <HBarChart data={barrasComLogo(recCat.pagForn)} color="#e06a6a" />
         </Card>
       </div>
     </>

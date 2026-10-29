@@ -70,6 +70,12 @@ CREATE TABLE IF NOT EXISTS ops.sync_job (
 CREATE INDEX IF NOT EXISTS idx_sync_job_created ON ops.sync_job (created_at DESC);
 COMMENT ON TABLE ops.sync_job IS 'Fila de cargas Omie disparadas pelo admin, cron Vercel ou GitHub Action.';
 
+-- Papel com acesso de admin + ferramentas internas (Qualidade & Sync).
+ALTER TYPE auth.papel ADD VALUE IF NOT EXISTS 'desenvolvedor';
+
+-- Telas desligadas por empresa (ids de web/src/lib/modulos.ts). Vazio = tudo ligado.
+ALTER TABLE ops.aplicativo ADD COLUMN IF NOT EXISTS modulos_desativados TEXT[] NOT NULL DEFAULT '{}';
+
 DROP TRIGGER IF EXISTS trg_aplicativo_updated_at ON ops.aplicativo;
 CREATE TRIGGER trg_aplicativo_updated_at
     BEFORE UPDATE ON ops.aplicativo

@@ -9,6 +9,7 @@ export type AplicativoRow = {
   sync_habilitado: boolean;
   ultima_sync_at: string | null;
   ultima_sync_status: string | null;
+  modulos_desativados: string[];
 };
 
 export type UsuarioRow = {
@@ -24,7 +25,7 @@ export type UsuarioRow = {
 export async function listAplicativos(): Promise<AplicativoRow[]> {
   return query<AplicativoRow>(
     `SELECT id::text, apelido, razao_social_cache, app_key, ativo, sync_habilitado,
-            ultima_sync_at::text, ultima_sync_status::text
+            ultima_sync_at::text, ultima_sync_status::text, modulos_desativados
      FROM ops.aplicativo
      ORDER BY apelido, id`
   );
@@ -33,7 +34,7 @@ export async function listAplicativos(): Promise<AplicativoRow[]> {
 export async function getAplicativo(id: string): Promise<AplicativoRow | null> {
   const rows = await query<AplicativoRow>(
     `SELECT id::text, apelido, razao_social_cache, app_key, ativo, sync_habilitado,
-            ultima_sync_at::text, ultima_sync_status::text
+            ultima_sync_at::text, ultima_sync_status::text, modulos_desativados
      FROM ops.aplicativo WHERE id = $1`,
     [id]
   );

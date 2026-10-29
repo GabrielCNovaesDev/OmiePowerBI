@@ -337,11 +337,12 @@ export async function getContas(filter?: DimFilter) {
     codigo_cc_omie: string;
     descricao: string;
     banco: string | null;
+    codigo_banco: string | null;
     tipo: string | null;
     saldo: number;
     previsto: number;
   }>(
-    `SELECT cc.codigo_cc_omie::text, cc.descricao, b.nome AS banco, cc.tipo_conta_corrente AS tipo,
+    `SELECT cc.codigo_cc_omie::text, cc.descricao, b.nome AS banco, cc.codigo_banco, cc.tipo_conta_corrente AS tipo,
             COALESCE(s.saldo_atual,0)::float AS saldo,
             COALESCE(s.saldo_atual_previsto,0)::float AS previsto
      FROM dim.conta_corrente cc
@@ -370,11 +371,12 @@ export async function getExtrato(limit = 120, filter?: DimFilter) {
     natureza: string | null;
     valor: number;
     conta: string;
+    codigo_banco: string | null;
     situacao: string | null;
   }>(
     `SELECT e.data_lancamento::text, COALESCE(e.nome_cliente, e.razao_social_cliente, e.observacoes, 'Lançamento') AS descricao,
             COALESCE(e.descricao_categoria, e.codigo_categoria) AS categoria,
-            e.natureza, e.valor_documento::float AS valor, cc.descricao AS conta, e.situacao
+            e.natureza, e.valor_documento::float AS valor, cc.descricao AS conta, cc.codigo_banco, e.situacao
      FROM fato.extrato_movimento e
      JOIN dim.conta_corrente cc ON cc.app_key=e.app_key AND cc.codigo_cc_omie=e.codigo_cc_omie
      WHERE e.codigo_lancamento IS NOT NULL AND e.codigo_lancamento <> 0

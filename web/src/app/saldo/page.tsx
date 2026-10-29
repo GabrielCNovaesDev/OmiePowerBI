@@ -4,6 +4,7 @@ import { Card, DataTable, Signed } from "@/components/ui";
 import { money } from "@/lib/format";
 import { getSaldoEvolucaoMensal, getSaldoPorConta } from "@/lib/dash";
 import { readParams } from "@/lib/params";
+import { BancoNome } from "@/components/marca";
 
 export default async function SaldoPage({
   searchParams,
@@ -20,7 +21,9 @@ export default async function SaldoPage({
   const totalByMonth = months.map((mes) => evolucao.filter((e) => e.mes === mes).reduce((s, e) => s + Number(e.saldo), 0));
   const labels = months.map((m) => m.slice(5));
   const byConta = new Map<string, number[]>();
+  const bancoDaConta = new Map<string, string | null>(contas.map((c) => [c.conta, c.codigo_banco]));
   for (const row of evolucao) {
+    if (!bancoDaConta.has(row.conta)) bancoDaConta.set(row.conta, row.codigo_banco);
     const arr = byConta.get(row.conta) ?? months.map(() => 0);
     const idx = months.indexOf(row.mes);
     if (idx >= 0) arr[idx] = Number(row.saldo);
@@ -35,7 +38,7 @@ export default async function SaldoPage({
           <p className="mb-3 text-sm font-semibold">Saldo total por conta corrente</p>
           <DataTable
             headers={["Conta", "Saldo"]}
-            rows={contas.map((c) => [c.conta, <Signed key={c.conta} value={Number(c.saldo)} />])}
+            rows={contas.map((c) => [<BancoNome key={c.conta} codigo={c.codigo_banco} nome={c.conta} />, <Signed key={`s-${c.conta}`} value={Number(c.saldo)} />])}
             footer={["Total", <Signed key="t" value={contas.reduce((s, c) => s + Number(c.saldo), 0)} />]}
           />
         </Card>
@@ -49,7 +52,7 @@ export default async function SaldoPage({
         <DataTable
           headers={["Conta corrente", ...labels, "Atual"]}
           rows={[...byConta.entries()].map(([conta, vals]) => [
-            conta,
+            <BancoNome key={conta} codigo={bancoDaConta.get(conta)} nome={conta} />,
             ...vals.map((v, i) => <Signed key={`${conta}-${i}`} value={v} />),
             <Signed key={`${conta}-a`} value={vals[vals.length - 1] ?? 0} />,
           ])}
@@ -59,7 +62,7 @@ export default async function SaldoPage({
         <p className="mb-3 text-sm font-semibold">Disponível (previsto + limite)</p>
         <DataTable
           headers={["Conta", "Saldo", "Previsto", "Disponível"]}
-          rows={contas.map((c) => [c.conta, money(c.saldo), money(c.previsto), money(c.disponivel)])}
+          rows={contas.map((c) => [<BancoNome key={c.conta} codigo={c.codigo_banco} nome={c.conta} />, money(c.saldo), money(c.previsto), money(c.disponivel)])}
         />
       </Card>
     </div>

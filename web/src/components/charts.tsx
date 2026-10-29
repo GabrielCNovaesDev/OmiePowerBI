@@ -186,14 +186,35 @@ export function DonutChart({
   return <Chart option={option} height={260} />;
 }
 
-export function HBarChart({ data, color = COLORS.receive }: { data: Array<{ name: string; value: number }>; color?: string }) {
+export function HBarChart({
+  data,
+  color = COLORS.receive,
+}: {
+  data: Array<{ name: string; value: number; icon?: string | null }>;
+  color?: string;
+}) {
   const rows = data.filter((d) => d.value !== 0).slice(0, 12).reverse();
   if (!rows.length) return <Chart option={null} />;
+  // Logo opcional antes do nome (rich text do ECharts: um estilo por imagem).
+  const rich: Record<string, { backgroundColor: { image: string }; width: number; height: number }> = {};
+  rows.forEach((r, i) => {
+    if (r.icon) rich[`i${i}`] = { backgroundColor: { image: r.icon }, width: 14, height: 14 };
+  });
   const option: EChartsOption = {
     tooltip: { trigger: "axis", axisPointer: { type: "shadow" } },
     grid: { left: 8, right: 56, top: 8, bottom: 8, containLabel: true },
     xAxis: { type: "value", axisLabel: { color: COLORS.mist, formatter: (v: number) => compactMoney(v) }, splitLine: { lineStyle: { color: COLORS.grid } } },
-    yAxis: { type: "category", data: rows.map((r) => r.name), axisLabel: { color: COLORS.ink, width: 140, overflow: "truncate" } },
+    yAxis: {
+      type: "category",
+      data: rows.map((r) => r.name),
+      axisLabel: {
+        color: COLORS.ink,
+        width: 140,
+        overflow: "truncate",
+        rich,
+        formatter: (value: string, index: number) => (rich[`i${index}`] ? `{i${index}|}  ${value}` : value),
+      },
+    },
     series: [
       {
         type: "bar",

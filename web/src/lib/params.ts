@@ -2,7 +2,23 @@ import { resolvePeriod, type PeriodBounds } from "./period";
 import { auth } from "@/auth";
 import { resolveTenant, type Tenant } from "./tenant";
 import { oneParam, parseContaParam, TIPO_CONTA_CODES } from "./params-shared";
-import { redirect } from "next/navigation";
+import { moduloDaRota, ROTA_DESENVOLVEDOR } from "./modulos";
+import { headers } from "next/headers";
+import { notFound, redirect } from "next/navigation";
+
+// Tela desligada para a empresa, ou ferramenta interna sem papel de desenvolvedor:
+// responde como se a rota não existisse.
+async function garantirAcessoTela(tenant: Tenant) {
+  let pathname = "";
+  try {
+    pathname = new URL((await headers()).get("x-url") || "http://local.invalid/").pathname;
+  } catch {
+    return;
+  }
+  if (pathname === ROTA_DESENVOLVEDOR && tenant.papel !== "desenvolvedor") notFound();
+  const modulo = moduloDaRota(pathname);
+  if (modulo && tenant.modulosDesativados.includes(modulo)) notFound();
+}
 
 function parseTipoConta(value?: string): string | undefined {
   if (!value || !TIPO_CONTA_CODES.has(value)) return undefined;
@@ -41,6 +57,7 @@ export async function readParams(
     redirect("/login");
   }
   const tenant = await resolveTenant(session, oneParam(sp, "empresa"));
+  await garantirAcessoTela(tenant);
   return {
     period: resolvePeriod(sp.periodo),
     base: sp.base === "comp" ? "comp" : "caixa",

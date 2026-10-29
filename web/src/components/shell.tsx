@@ -1,3 +1,4 @@
+import { podeAdministrar } from "@/auth.config";
 import { BrandMark } from "./brand";
 import { EmpresaPicker } from "./empresa-picker";
 import { DashTabs, ReportNav } from "./nav";
@@ -11,6 +12,7 @@ export function Shell({
   filterOptions,
   userName,
   papel,
+  hiddenRoutes = [],
 }: {
   children: React.ReactNode;
   company?: string | null;
@@ -18,6 +20,7 @@ export function Shell({
   filterOptions?: FilterOptions | null;
   userName?: string | null;
   papel?: string | null;
+  hiddenRoutes?: string[];
 }) {
   return (
     <div className="min-h-screen bg-bg">
@@ -26,7 +29,7 @@ export function Shell({
           <BrandMark />
         </div>
         <div className="min-w-0 flex-1">
-          <DashTabs />
+          <DashTabs hidden={hiddenRoutes} />
         </div>
         <div className="ml-auto text-right text-[11px] text-white/60">
           <EmpresaPicker
@@ -35,12 +38,12 @@ export function Shell({
             fallbackLabel={company}
           />
           <p>{lastSync ? `Atualizado ${lastSync}` : "Aguardando primeira carga"}</p>
-          {userName ? <SessionMenu name={userName} papel={papel || ""} showAdmin={papel === "admin"} /> : null}
+          {userName ? <SessionMenu name={userName} papel={papel || ""} showAdmin={podeAdministrar(papel)} /> : null}
         </div>
       </header>
       <div className="grid grid-cols-1 lg:grid-cols-[220px_1fr]">
         <aside className="bg-header px-4 py-5 lg:min-h-[calc(100vh-64px)]">
-          <ReportNav />
+          <ReportNav hidden={hiddenRoutes} />
           <div className="mt-8">
             <FilterRail options={filterOptions} />
           </div>

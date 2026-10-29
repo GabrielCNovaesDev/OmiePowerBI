@@ -43,6 +43,7 @@ export function UsuarioForm({
           <label className="block text-sm">
             Papel
             <select name="papel" defaultValue={existing?.papel || "cliente"} className="mt-1 w-full rounded border border-line bg-white px-3 py-2">
+              <option value="desenvolvedor">Desenvolvedor — admin + Qualidade &amp; Sync</option>
               <option value="admin">Admin — gerencia a plataforma</option>
               <option value="interno">Interno — vê todas as empresas no BI</option>
               <option value="cliente">Cliente — só as empresas marcadas</option>

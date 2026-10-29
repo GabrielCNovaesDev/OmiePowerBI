@@ -1,6 +1,6 @@
 import NextAuth from "next-auth";
 import { NextResponse } from "next/server";
-import { authConfig } from "./src/auth.config";
+import { authConfig, podeAdministrar } from "./auth.config";
 
 const { auth } = NextAuth(authConfig);
 
@@ -21,7 +21,7 @@ export default auth((req) => {
     return NextResponse.redirect(new URL("/", req.nextUrl));
   }
 
-  if (req.auth && pathname.startsWith("/admin") && req.auth.user?.papel !== "admin") {
+  if (req.auth && pathname.startsWith("/admin") && !podeAdministrar(req.auth.user?.papel)) {
     return NextResponse.redirect(new URL("/", req.nextUrl));
   }
 
@@ -31,5 +31,5 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon|logos/).*)"],
 };

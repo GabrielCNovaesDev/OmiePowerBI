@@ -36,12 +36,12 @@ function hrefKeepFilters(path: string, search: URLSearchParams) {
   return q ? `${path}?${q}` : path;
 }
 
-export function DashTabs() {
+export function DashTabs({ hidden = [] }: { hidden?: string[] }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   return (
     <nav className="flex flex-wrap items-center gap-1">
-      {DASHBOARDS.map((item) => {
+      {DASHBOARDS.filter((item) => !hidden.includes(item.href)).map((item) => {
         const active = pathname === item.href;
         return (
           <Link
@@ -60,14 +60,14 @@ export function DashTabs() {
   );
 }
 
-export function ReportNav() {
+export function ReportNav({ hidden = [] }: { hidden?: string[] }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   return (
     <div>
       <p className="mb-2 px-1 text-[10px] uppercase tracking-[0.16em] text-white/40">Relatórios</p>
       <nav className="flex flex-col gap-0.5">
-        {RELATORIOS.map((item) => {
+        {RELATORIOS.filter((item) => !hidden.includes(item.href)).map((item) => {
           const active = pathname === item.href;
           return (
             <Link

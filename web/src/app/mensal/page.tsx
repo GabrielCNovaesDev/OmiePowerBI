@@ -1,3 +1,4 @@
+import { barrasComLogo } from "@/lib/marcas";
 import { AgingBlock } from "@/components/aging-block";
 import { ComboCashflow, HBarChart, Spark, Waterfall } from "@/components/charts";
 import { PageHeader } from "@/components/shell";
@@ -110,7 +111,7 @@ export default async function MensalPage({
           </Card>
           <Card>
             <p className="mb-2 text-sm font-semibold">Recebido por cliente</p>
-            <HBarChart data={recCat.recCli.map((x) => ({ name: x.nome, value: Number(x.valor) }))} />
+            <HBarChart data={barrasComLogo(recCat.recCli)} />
           </Card>
           <Card>
             <p className="mb-2 text-sm font-semibold">Pago por categoria</p>
@@ -118,7 +119,7 @@ export default async function MensalPage({
           </Card>
           <Card>
             <p className="mb-2 text-sm font-semibold">Pago por fornecedor</p>
-            <HBarChart data={recCat.pagForn.map((x) => ({ name: x.nome, value: Number(x.valor) }))} color="#e06a6a" />
+            <HBarChart data={barrasComLogo(recCat.pagForn)} color="#e06a6a" />
           </Card>
         </div>
       </section>

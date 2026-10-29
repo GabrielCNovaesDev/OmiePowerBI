@@ -15,5 +15,11 @@ export default async function EditarAplicativoPage({
   const existing = await getAplicativo(id);
   if (!existing) notFound();
   const sp = await searchParams;
-  return <AplicativoForm existing={existing} error={typeof sp.error === "string" ? sp.error : undefined} />;
+  return (
+    <AplicativoForm
+      existing={existing}
+      error={typeof sp.error === "string" ? sp.error : undefined}
+      ok={typeof sp.ok === "string" ? sp.ok : undefined}
+    />
+  );
 }

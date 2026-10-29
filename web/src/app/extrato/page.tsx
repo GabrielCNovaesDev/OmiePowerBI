@@ -3,6 +3,7 @@ import { Card, DataTable, Kpi } from "@/components/ui";
 import { formatDate, money } from "@/lib/format";
 import { getContas, getExtrato } from "@/lib/queries";
 import { readParams } from "@/lib/params";
+import { BancoNome } from "@/components/marca";
 
 export default async function ExtratoPage({
   searchParams,
@@ -24,14 +25,14 @@ export default async function ExtratoPage({
         <p className="px-4 py-3 text-sm font-semibold">Contas</p>
         <DataTable
           headers={["Conta", "Banco", "Tipo", "Saldo", "Previsto"]}
-          rows={contas.map((c) => [c.descricao, c.banco || "—", c.tipo || "—", money(c.saldo), money(c.previsto)])}
+          rows={contas.map((c) => [<BancoNome key={c.codigo_cc_omie} codigo={c.codigo_banco} nome={c.descricao} />, c.banco || "—", c.tipo || "—", money(c.saldo), money(c.previsto)])}
         />
       </Card>
       <Card padded={false}>
         <p className="px-4 py-3 text-sm font-semibold">Movimentos recentes</p>
         <DataTable
           headers={["Data", "Conta", "Descrição", "Categoria", "Situação", "Valor"]}
-          rows={movimentos.map((m) => [formatDate(m.data_lancamento), m.conta, m.descricao, m.categoria || "—", m.situacao || "—", money(m.valor)])}
+          rows={movimentos.map((m, i) => [formatDate(m.data_lancamento), <BancoNome key={`c${i}`} codigo={m.codigo_banco} nome={m.conta} />, m.descricao, m.categoria || "—", m.situacao || "—", money(m.valor)])}
         />
       </Card>
     </div>

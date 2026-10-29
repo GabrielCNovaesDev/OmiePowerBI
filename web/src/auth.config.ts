@@ -1,6 +1,11 @@
 import type { NextAuthConfig } from "next-auth";
 
-export type Papel = "admin" | "interno" | "cliente";
+export type Papel = "desenvolvedor" | "admin" | "interno" | "cliente";
+
+// Desenvolvedor tem tudo do admin e ainda vê as ferramentas internas (Qualidade & Sync).
+export function podeAdministrar(papel?: string | null): boolean {
+  return papel === "admin" || papel === "desenvolvedor";
+}
 
 if (!process.env.AUTH_SECRET && process.env.NODE_ENV !== "production") {
   process.env.AUTH_SECRET = "costa-novaes-bi-dev-secret-change-me";

@@ -8,6 +8,7 @@ import { getAplicativo, getAplicativoSecret, replaceUsuarioApps } from "@/lib/ad
 import { query } from "@/lib/db";
 import { dispatchGithubSync, githubSyncConfigured } from "@/lib/github-sync";
 import { testOmieCredentials } from "@/lib/omie-test";
+import { MODULOS } from "@/lib/modulos";
 import { decryptSecret, encryptSecret } from "@/lib/secret";
 
 function str(form: FormData, key: string) {
@@ -82,20 +83,33 @@ export async function saveAplicativo(formData: FormData) {
   redirect("/admin/aplicativos?ok=Empresa+salva");
 }
 
+// Telas ligadas/desligadas da empresa. Grava só os desligados, para que módulos
+// novos nasçam ligados em todas as empresas.
+export async function saveModulos(formData: FormData) {
+  await requireAdmin();
+  const id = str(formData, "id");
+  if (!id) redirect("/admin/aplicativos");
+  const ligados = new Set(formData.getAll("modulo").map(String));
+  const desativados = MODULOS.map((m) => m.id).filter((m) => !ligados.has(m));
+  await query(`UPDATE ops.aplicativo SET modulos_desativados=$2, updated_at=NOW() WHERE id=$1`, [id, desativados]);
+  revalidatePath("/", "layout");
+  redirect(`/admin/aplicativos/${id}?ok=Telas+atualizadas`);
+}
+
 export async function saveUsuario(formData: FormData) {
   const session = await requireAdmin();
   const id = str(formData, "id");
   const nome = str(formData, "nome");
   const email = str(formData, "email").toLowerCase();
   const password = str(formData, "password");
-  const papel = str(formData, "papel") as "admin" | "interno" | "cliente";
+  const papel = str(formData, "papel") as "desenvolvedor" | "admin" | "interno" | "cliente";
   const ativo = formData.get("ativo") === "on";
   const appIds = formData.getAll("apps").map(String).filter(Boolean);
 
   if (!nome || !email) {
     redirect("/admin/usuarios/novo?error=Preencha+nome+e+e-mail");
   }
-  if (!["admin", "interno", "cliente"].includes(papel)) {
+  if (!["desenvolvedor", "admin", "interno", "cliente"].includes(papel)) {
     redirect("/admin/usuarios/novo?error=Papel+invalido");
   }
   if (papel === "cliente" && appIds.length === 0) {

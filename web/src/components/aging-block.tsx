@@ -1,6 +1,7 @@
 import { DonutChart, HBarChart } from "@/components/charts";
 import { Card } from "@/components/ui";
 import { compactMoney } from "@/lib/format";
+import { barrasComLogo } from "@/lib/marcas";
 
 export function AgingBlock({
   title,
@@ -16,7 +17,7 @@ export function AgingBlock({
   total: number;
   aging: Array<{ faixa: string; valor: number }>;
   categorias: Array<{ nome: string; valor: number }>;
-  pessoas: Array<{ nome: string; valor: number }>;
+  pessoas: Array<{ nome: string; valor: number; cnpj?: string | null }>;
   color: string;
   pessoaLabel?: string;
   banner?: boolean;
@@ -43,7 +44,7 @@ export function AgingBlock({
         </Card>
         <Card>
           <p className="mb-2 text-sm font-semibold">{pessoaLabel}</p>
-          <HBarChart data={pessoas.map((c) => ({ name: c.nome, value: Number(c.valor) }))} color={color} />
+          <HBarChart data={barrasComLogo(pessoas)} color={color} />
         </Card>
       </div>
     </div>

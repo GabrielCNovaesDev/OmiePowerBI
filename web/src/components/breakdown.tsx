@@ -2,6 +2,7 @@ import { DonutChart, HBarChart } from "@/components/charts";
 import { Card, DataTable } from "@/components/ui";
 import { compactMoney, money } from "@/lib/format";
 import type { NamedValue } from "@/lib/dash";
+import { barrasComLogo } from "@/lib/marcas";
 
 export function BreakdownGrid({
   total,
@@ -49,7 +50,7 @@ export function BreakdownGrid({
       </Card>
       <Card>
         <p className="mb-2 text-sm font-semibold">{pessoaLabel}</p>
-        <HBarChart data={pessoas.map((x) => ({ name: x.nome, value: Number(x.valor) }))} color="#4a5568" />
+        <HBarChart data={barrasComLogo(pessoas)} color="#4a5568" />
       </Card>
       <Card>
         <p className="mb-2 text-sm font-semibold">Por categoria</p>

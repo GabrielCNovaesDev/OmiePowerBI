@@ -9,6 +9,7 @@ import {
   getKpisPeriodo,
   getSaldoAtual,
   getTitulosVencendo,
+  getTotaisEmAberto,
   saldoPrevistoHoje,
   type AgingSlice,
   type DailyPoint,
@@ -16,6 +17,8 @@ import {
   type TituloHoje,
 } from "@/lib/dash";
 import { hrefWith, readParams } from "@/lib/params";
+import { barrasComLogo } from "@/lib/marcas";
+import { ClienteNome } from "@/components/marca";
 import {
   endOfMonthISO,
   endOfWeekISO,
@@ -88,7 +91,7 @@ export default async function ResumoPage({
   const chartTo = view === "hoje" ? today : view === "semana" ? weekEnd : monthEnd;
   const titlesTo = view === "hoje" ? today : view === "semana" ? weekEnd : monthEnd;
 
-  const [saldo, kpis, receber, pagar, diario] = await Promise.all([
+  const [saldo, kpis, receber, pagar, diario, totais] = await Promise.all([
     getSaldoAtual(filter),
     view === "hoje" ? getKpisPeriodo("hoje", "hoje", filter) : getKpisPeriodo(today, titlesTo, filter),
     view === "hoje"
@@ -98,6 +101,7 @@ export default async function ResumoPage({
       ? getTitulosVencendo("P", filter, { mode: "hoje" })
       : getTitulosVencendo("P", filter, { mode: "periodo", from: today, to: titlesTo }),
     getFluxoDiarioMes(chartFrom, chartTo, filter),
+    getTotaisEmAberto(filter),
   ]);
   const previsto = saldoPrevistoHoje(saldo.saldo, kpis);
   const previstoSerie = diario.at(-1)?.saldo ?? previsto;
@@ -155,6 +159,22 @@ export default async function ResumoPage({
         headers={["Categoria / Fornecedor / NF", "Vencimento", "Qtd", "Valor"]}
         rows={pagar}
       />
+      <div className="grid gap-3 md:grid-cols-2">
+        <ToneCard
+          label="Total a receber em aberto"
+          value={totais.receber}
+          hint={`${totais.qtdReceber} contas · atrasadas + a vencer · clique para detalhar`}
+          tone="receive"
+          href={hrefWith(raw, "/titulos", { nat: "R", recorte: "aberto" })}
+        />
+        <ToneCard
+          label="Total a pagar em aberto"
+          value={totais.pagar}
+          hint={`${totais.qtdPagar} contas · atrasadas + a vencer · clique para detalhar`}
+          tone="pay"
+          href={hrefWith(raw, "/titulos", { nat: "P", recorte: "aberto" })}
+        />
+      </div>
       <div className="grid gap-3 md:grid-cols-3">
         <ToneCard
           label="Recebimentos vencidos"
@@ -335,8 +355,12 @@ function CarteiraPanel({
         </Link>
         <DataTable
           headers={headers}
-          rows={rows.map((r) => [
-            `${r.categoria} · ${r.cliente}${r.nf ? ` · ${r.nf}` : ""}`,
+          rows={rows.map((r, i) => [
+            <span key={`c${i}`} className="inline-flex min-w-0 flex-wrap items-center gap-x-1">
+              <span>{r.categoria} ·</span>
+              <ClienteNome cnpj={r.cnpj} nome={r.cliente ?? "(sem cadastro)"} />
+              {r.nf ? <span>· {r.nf}</span> : null}
+            </span>,
             formatDate(r.vencimento),
             String(r.qtd),
             money(r.valor),
@@ -382,7 +406,7 @@ function AgingResumo({
         </Card>
         <Card>
           <p className="mb-2 text-sm font-semibold">{pessoaLabel}</p>
-          <HBarChart data={pessoas.map((c) => ({ name: c.nome, value: Number(c.valor) }))} color={color} />
+          <HBarChart data={barrasComLogo(pessoas)} color={color} />
         </Card>
       </div>
     </div>

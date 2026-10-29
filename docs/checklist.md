@@ -31,16 +31,19 @@ Detalhes técnicos em [analise-tecnica.md](analise-tecnica.md).
 - [ ] Novos endpoints: NF-e, NFS-e, vendas, produtos, estoque/CMC, compras, contratos, vendedores, projetos
 
 ## Ajustes de tela
-- [ ] Resumo: total a pagar e total a receber
-- [ ] Módulos por empresa (ligar/desligar telas por cliente)
-  - [ ] Previsto do Fluxo de Caixa
-  - [ ] DRE
-  - [ ] Previsto x Realizado
-  - [ ] Q&A
-- [ ] Papel "desenvolvedor": só ele vê Qualidade & Sync
+- [x] Resumo: total a pagar e total a receber
+- [x] Módulos por empresa (Admin → Empresas → editar → "Telas desta empresa")
+  - [x] Desligados na DI PRIMO: Previsto do Fluxo de Caixa, DRE, Previsto x Realizado, Q&A
+- [x] Papel "desenvolvedor": só ele vê Qualidade & Sync (precisa sair e entrar de novo)
+- [x] Ícones dos bancos nas contas (Saldo, Extrato, Diário, Check Panel)
+- [x] Logos dos principais clientes da DI PRIMO (GBarbosa, Atakarejo, Mateus; Assaí, Bombom e Ki Barato com selo de iniciais)
+- [x] Coluna `ops.aplicativo.modulos_desativados` criada no banco
+- [x] Telas conferidas no navegador (local) e publicadas
+- [x] Datas sem horário apareciam um dia antes (ex.: vencimento 28/10 mostrado como 27/10)
 
 ## Segurança e limpeza
 - [x] Check Panel mostrava pendências de outras empresas (filtro sem parênteses)
+- [x] Middleware de login nunca rodava (estava fora de `src/`): agora redireciona e protege `/admin` na borda
 - [ ] Repo público: apagar logs antigos do Actions e remover `prints/`
 - [ ] Sessão expira na hora ao desativar/rebaixar usuário
 - [ ] Demais itens da revisão (analise-tecnica.md, seção 6)

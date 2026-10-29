@@ -5,6 +5,7 @@ import { cn, formatDate, money } from "@/lib/format";
 import { getAnaliseDesvios, getBlankDocs, getCheckPanel, getSaldoAtual, getSaldoPorConta } from "@/lib/dash";
 import { getResumo } from "@/lib/queries";
 import { hrefWith, readParams, type DimFilter } from "@/lib/params";
+import { BancoNome } from "@/components/marca";
 import Link from "next/link";
 
 const TABS = [
@@ -247,7 +248,7 @@ async function CaixaCheck({ filter }: { filter?: DimFilter }) {
       <p className={ok ? "mb-3 text-gain" : "mb-3 text-loss"}>Diferença: {money(omieSaldo - saldo.saldo)}</p>
       <DataTable
         headers={["Conta", "Saldo BI", "Previsto"]}
-        rows={contas.map((c) => [c.conta, money(c.saldo), money(c.previsto)])}
+        rows={contas.map((c) => [<BancoNome key={c.conta} codigo={c.codigo_banco} nome={c.conta} />, money(c.saldo), money(c.previsto)])}
       />
     </Card>
   );

@@ -9,6 +9,7 @@ export type EmpresaOpt = {
   app_key: string;
   apelido: string;
   razao_social: string | null;
+  modulos_desativados?: string[] | null;
 };
 
 export type Tenant = {
@@ -20,24 +21,26 @@ export type Tenant = {
   selectedKeys: string[];
   empresas: EmpresaOpt[];
   canPickEmpresa: boolean;
+  // Módulos desligados em alguma das empresas selecionadas (consolidado esconde).
+  modulosDesativados: string[];
 };
 
 function isStaff(papel: Papel) {
-  return papel === "admin" || papel === "interno";
+  return papel === "desenvolvedor" || papel === "admin" || papel === "interno";
 }
 
 const loadFromAplicativo = cache(async function loadFromAplicativo(userId: string, papel: Papel): Promise<EmpresaOpt[]> {
   try {
     if (isStaff(papel)) {
       return query<EmpresaOpt>(
-        `SELECT app_key, apelido, razao_social_cache AS razao_social
+        `SELECT app_key, apelido, razao_social_cache AS razao_social, modulos_desativados
          FROM ops.aplicativo
          WHERE ativo = true
          ORDER BY apelido, id`
       );
     }
     return query<EmpresaOpt>(
-      `SELECT a.app_key, a.apelido, a.razao_social_cache AS razao_social
+      `SELECT a.app_key, a.apelido, a.razao_social_cache AS razao_social, a.modulos_desativados
        FROM ops.aplicativo a
        JOIN auth.usuario_aplicativo ua ON ua.aplicativo_id = a.id
        WHERE ua.usuario_id = $1 AND a.ativo = true
@@ -82,6 +85,14 @@ export async function resolveTenant(session: Session, empresaParam?: string | nu
     selectedKeys = allowedKeys;
   }
 
+  const modulosDesativados = [
+    ...new Set(
+      empresas
+        .filter((e) => selectedKeys.includes(e.app_key))
+        .flatMap((e) => e.modulos_desativados ?? [])
+    ),
+  ];
+
   return {
     userId,
     nome: user.name || user.email || "Usuário",
@@ -91,6 +102,7 @@ export async function resolveTenant(session: Session, empresaParam?: string | nu
     selectedKeys,
     empresas,
     canPickEmpresa,
+    modulosDesativados,
   };
 }
 
