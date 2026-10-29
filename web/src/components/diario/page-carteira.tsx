@@ -49,8 +49,9 @@ export async function DiarioCarteira({
           </Link>
         </p>
         <DataTable
-          headers={["Vencimento", natureza === "R" ? "Cliente" : "Fornecedor", "Documento", "Categoria", "Status", "Aberto"]}
+          headers={["Previsão", "Vencimento", natureza === "R" ? "Cliente" : "Fornecedor", "Documento", "Categoria", "Status", "Aberto"]}
           rows={drill.rows.map((t) => [
+            formatDate(t.data_previsao ?? t.data_vencimento),
             formatDate(t.data_vencimento),
             t.razao_social || "—",
             t.numero_titulo || t.codigo_titulo_omie,

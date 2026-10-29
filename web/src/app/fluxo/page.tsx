@@ -38,7 +38,7 @@ export default async function FluxoPage({
         <PageHeader
           kicker="Dashboards"
           title="Fluxo de Caixa"
-          subtitle={`${period.label} · títulos em aberto por vencimento (atrasados no mês corrente)`}
+          subtitle={`${period.label} · títulos em aberto pela previsão (atrasados no mês corrente)`}
         />
         <ModeSwitch current="previsto" raw={raw} />
         <FluxoResumo title="Fluxo de Caixa Previsto" months={months} />

@@ -40,6 +40,8 @@ Detalhes técnicos em [analise-tecnica.md](analise-tecnica.md).
 - [x] Coluna `ops.aplicativo.modulos_desativados` criada no banco
 - [x] Telas conferidas no navegador (local) e publicadas
 - [x] Datas sem horário apareciam um dia antes (ex.: vencimento 28/10 mostrado como 27/10)
+- [x] "Hoje" calculado no fuso de São Paulo (depois das 21h o BI já mostrava o dia seguinte)
+- [x] Prazos de títulos em aberto pela previsão de recebimento/pagamento, como o Omie (hoje/semana/mês, fluxo previsto, faixas de dias); listas com colunas Previsão e Vencimento
 
 ## Segurança e limpeza
 - [x] Check Panel mostrava pendências de outras empresas (filtro sem parênteses)

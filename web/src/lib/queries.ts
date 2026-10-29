@@ -2,6 +2,7 @@ import { query } from "./db";
 import { n } from "./format";
 import { Binder, dimSql, type DimFilter } from "./params";
 import { TITULO_RATEADO } from "./rateio";
+import { HOJE_SQL } from "./datas-sql";
 
 export type Empresa = {
   razao_social: string;
@@ -91,10 +92,10 @@ export async function getHomeKpis(filter?: DimFilter): Promise<KpiHome> {
         COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='P' AND status NOT IN ('CANCELADO','PAGO','LIQUIDADO')),0) AS ap_aberto,
         COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='R' AND status='ATRASADO'),0) AS ar_atraso,
         COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='P' AND status='ATRASADO'),0) AS ap_atraso,
-        COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='R' AND status NOT IN ('CANCELADO','RECEBIDO','LIQUIDADO') AND data_vencimento BETWEEN CURRENT_DATE AND CURRENT_DATE + 7),0) AS rec7,
-        COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='R' AND status NOT IN ('CANCELADO','RECEBIDO','LIQUIDADO') AND data_vencimento BETWEEN CURRENT_DATE AND CURRENT_DATE + 30),0) AS rec30,
-        COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='P' AND status NOT IN ('CANCELADO','PAGO','LIQUIDADO') AND data_vencimento BETWEEN CURRENT_DATE AND CURRENT_DATE + 7),0) AS pag7,
-        COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='P' AND status NOT IN ('CANCELADO','PAGO','LIQUIDADO') AND data_vencimento BETWEEN CURRENT_DATE AND CURRENT_DATE + 30),0) AS pag30
+        COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='R' AND status NOT IN ('CANCELADO','RECEBIDO','LIQUIDADO') AND COALESCE(data_previsao, data_vencimento) BETWEEN ${HOJE_SQL} AND ${HOJE_SQL} + 7),0) AS rec7,
+        COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='R' AND status NOT IN ('CANCELADO','RECEBIDO','LIQUIDADO') AND COALESCE(data_previsao, data_vencimento) BETWEEN ${HOJE_SQL} AND ${HOJE_SQL} + 30),0) AS rec30,
+        COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='P' AND status NOT IN ('CANCELADO','PAGO','LIQUIDADO') AND COALESCE(data_previsao, data_vencimento) BETWEEN ${HOJE_SQL} AND ${HOJE_SQL} + 7),0) AS pag7,
+        COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='P' AND status NOT IN ('CANCELADO','PAGO','LIQUIDADO') AND COALESCE(data_previsao, data_vencimento) BETWEEN ${HOJE_SQL} AND ${HOJE_SQL} + 30),0) AS pag30
       FROM fato.titulo
       WHERE TRUE ${extraSql}
         AND valor_aberto > 0
@@ -162,6 +163,7 @@ export type TituloRow = {
   razao_social: string | null;
   status: string;
   data_vencimento: string | null;
+  data_previsao: string | null;
   data_emissao: string | null;
   valor_titulo: number;
   valor_aberto: number;
@@ -180,6 +182,7 @@ function mapTitulo(r: Record<string, unknown>): TituloRow {
     razao_social: r.razao_social ? String(r.razao_social) : null,
     status: String(r.status),
     data_vencimento: r.data_vencimento ? String(r.data_vencimento) : null,
+    data_previsao: r.data_previsao ? String(r.data_previsao) : null,
     data_emissao: r.data_emissao ? String(r.data_emissao) : null,
     valor_titulo: n(r.valor_titulo),
     valor_aberto: n(r.valor_aberto),
@@ -193,7 +196,7 @@ function mapTitulo(r: Record<string, unknown>): TituloRow {
 }
 
 const TITULO_SELECT = `SELECT t.codigo_titulo_omie::text, t.numero_titulo, c.razao_social, t.status::text,
-            t.data_vencimento::text, t.data_emissao::text,
+            t.data_vencimento::text, t.data_previsao::text, t.data_emissao::text,
             t.valor_titulo::float, t.valor_aberto::float, t.valor_pago::float,
             t.codigo_categoria, cat.descricao AS descricao_categoria, t.codigo_origem AS origem,
             t.numero_documento_fiscal AS nf, cc.descricao AS conta
@@ -214,7 +217,7 @@ export async function getTitulos(natureza: "R" | "P", limit = 80, filter?: DimFi
        CASE WHEN t.status IN ('ATRASADO') THEN 0
             WHEN t.status IN ('VENCEHOJE','AVENCER','EMABERTO','PAGTO_PARCIAL') THEN 1
             ELSE 2 END,
-       t.data_vencimento ASC NULLS LAST
+       COALESCE(t.data_previsao, t.data_vencimento) ASC NULLS LAST
      LIMIT ${lim}`,
     b.values
   );
@@ -225,7 +228,7 @@ export type TituloRecorte = "hoje" | "atraso" | "vencer" | "aberto";
 
 function recorteClause(recorte?: string): string {
   if (recorte === "hoje") {
-    return `AND t.data_vencimento = CURRENT_DATE AND t.valor_aberto > 0 AND t.status::text NOT IN ('CANCELADO','PAGO','RECEBIDO','LIQUIDADO')`;
+    return `AND COALESCE(t.data_previsao, t.data_vencimento) = ${HOJE_SQL} AND t.valor_aberto > 0 AND t.status::text NOT IN ('CANCELADO','PAGO','RECEBIDO','LIQUIDADO')`;
   }
   if (recorte === "atraso") {
     return `AND t.status = 'ATRASADO' AND t.valor_aberto > 0`;
@@ -270,7 +273,7 @@ export async function getTitulosDrill(opts: {
          CASE WHEN t.status IN ('ATRASADO') THEN 0
               WHEN t.status IN ('VENCEHOJE','AVENCER','EMABERTO','PAGTO_PARCIAL') THEN 1
               ELSE 2 END,
-         t.data_vencimento ASC NULLS LAST
+         COALESCE(t.data_previsao, t.data_vencimento) ASC NULLS LAST
        LIMIT ${lim}`,
       b.values
     ),
@@ -293,7 +296,7 @@ export async function getFluxoMensal(months = 12, filter?: DimFilter) {
             COALESCE(SUM(valor_baixa) FILTER (WHERE natureza='R'),0)::float AS receber,
             COALESCE(SUM(valor_baixa) FILTER (WHERE natureza='P'),0)::float AS pagar
      FROM fato.baixa
-     WHERE data_baixa >= (CURRENT_DATE - (${m} || ' months')::interval)
+     WHERE data_baixa >= (${HOJE_SQL} - (${m} || ' months')::interval)
        ${dimSql(b, filter, { appKey: "app_key" })}
      GROUP BY 1
      ORDER BY 1`,
@@ -306,7 +309,7 @@ export async function getFluxoProjetado(filter?: DimFilter) {
   return query<{ data: string; natureza: string; valor: number; qtd: number }>(
     `SELECT data::text, natureza::text, valor_total::float AS valor, qtd_titulos::int AS qtd
      FROM fato.vw_fluxo_caixa_projetado
-     WHERE data <= CURRENT_DATE + 45
+     WHERE data <= ${HOJE_SQL} + 45
        ${dimSql(b, filter, { appKey: "app_key" })}
      ORDER BY data, natureza`,
     b.values

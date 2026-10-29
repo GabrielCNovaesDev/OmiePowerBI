@@ -72,8 +72,9 @@ export default async function ReceberPage({
           </Link>
         </p>
         <DataTable
-          headers={["Vencimento", "Cliente", "Documento", "Categoria", "Status", "Valor", "Aberto"]}
+          headers={["Previsão", "Vencimento", "Cliente", "Documento", "Categoria", "Status", "Valor", "Aberto"]}
           rows={titulos.map((t) => [
+            formatDate(t.data_previsao ?? t.data_vencimento),
             formatDate(t.data_vencimento),
             t.razao_social || "—",
             t.numero_titulo || t.codigo_titulo_omie,

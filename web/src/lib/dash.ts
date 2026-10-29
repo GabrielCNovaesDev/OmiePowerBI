@@ -4,6 +4,9 @@ import { n } from "./format";
 import { todayISO, yearStartISO } from "./period";
 import { Binder, dimSql, type DimFilter } from "./params";
 import { EXTRATO_RATEADO, TITULO_RATEADO, movimentoRealizado } from "./rateio";
+import { HOJE_SQL, previsaoSql } from "./datas-sql";
+
+const PREV_T = previsaoSql("t");
 
 const MOVIMENTO_REALIZADO = movimentoRealizado();
 
@@ -148,9 +151,9 @@ export async function getTitulosVencendo(
     recorte.mode === "atrasado"
       ? `AND t.status = 'ATRASADO'`
       : recorte.mode === "periodo"
-        ? `AND t.data_vencimento BETWEEN ${b.add(recorte.from)}::date AND ${b.add(recorte.to)}::date
+        ? `AND ${PREV_T} BETWEEN ${b.add(recorte.from)}::date AND ${b.add(recorte.to)}::date
            AND t.status ${openClause(natureza)}`
-        : `AND t.data_vencimento = CURRENT_DATE
+        : `AND ${PREV_T} = ${HOJE_SQL}
            AND t.status ${openClause(natureza)}`;
   const orderBy = recorte.mode === "atrasado" ? "vencimento ASC NULLS LAST, valor DESC" : "valor DESC";
   return query<TituloHoje>(
@@ -158,7 +161,7 @@ export async function getTitulosVencendo(
             COALESCE(c.razao_social, '(sem cadastro)') AS cliente,
             MAX(c.cnpj_cpf) AS cnpj,
             t.numero_documento_fiscal AS nf,
-            t.data_vencimento::text AS vencimento,
+            ${PREV_T}::text AS vencimento,
             COUNT(DISTINCT t.codigo_titulo_omie)::int AS qtd,
             COALESCE(SUM(t.valor_aberto),0)::float AS valor
      FROM ${TITULO_RATEADO} t
@@ -204,11 +207,11 @@ export async function getKpisPeriodo(from: string, to: string, filter?: DimFilte
   const fromP = singleDay ? null : b.add(from);
   const toP = singleDay ? null : b.add(to);
   const vencR = singleDay
-    ? `natureza='R' AND status ${OPEN_R} AND data_vencimento = CURRENT_DATE AND valor_aberto > 0`
-    : `natureza='R' AND status ${OPEN_R} AND data_vencimento BETWEEN ${fromP}::date AND ${toP}::date AND valor_aberto > 0`;
+    ? `natureza='R' AND status ${OPEN_R} AND COALESCE(data_previsao, data_vencimento) = ${HOJE_SQL} AND valor_aberto > 0`
+    : `natureza='R' AND status ${OPEN_R} AND COALESCE(data_previsao, data_vencimento) BETWEEN ${fromP}::date AND ${toP}::date AND valor_aberto > 0`;
   const vencP = singleDay
-    ? `natureza='P' AND status ${OPEN_P} AND data_vencimento = CURRENT_DATE AND valor_aberto > 0`
-    : `natureza='P' AND status ${OPEN_P} AND data_vencimento BETWEEN ${fromP}::date AND ${toP}::date AND valor_aberto > 0`;
+    ? `natureza='P' AND status ${OPEN_P} AND COALESCE(data_previsao, data_vencimento) = ${HOJE_SQL} AND valor_aberto > 0`
+    : `natureza='P' AND status ${OPEN_P} AND COALESCE(data_previsao, data_vencimento) BETWEEN ${fromP}::date AND ${toP}::date AND valor_aberto > 0`;
   const rows = await query<Record<string, unknown>>(`
     SELECT
       COALESCE(SUM(valor_aberto) FILTER (WHERE ${vencR}),0)::float AS receber_hoje,
@@ -314,7 +317,7 @@ async function getSaldoAbertura(from: string, filter?: DimFilter): Promise<numbe
 // extrato vêm com sinal: entradas positivas, saídas negativas.
 const EXTRATO_REALIZADO = `COALESCE(e.situacao,'') <> 'Previsto'`;
 
-const PREVISTO_DATA_SQL =`CASE WHEN t.data_vencimento < CURRENT_DATE THEN CURRENT_DATE ELSE t.data_vencimento END`;
+const PREVISTO_DATA_SQL = `CASE WHEN ${PREV_T} < ${HOJE_SQL} THEN ${HOJE_SQL} ELSE ${PREV_T} END`;
 
 async function queryPrevistoMensal(from: string, to: string, filter?: DimFilter) {
   const b = new Binder();
@@ -816,9 +819,9 @@ export async function getFluxoDiarioMes(from: string, to: string, filter?: DimFi
       a.values
     ),
     query<{ dia: string; natureza: string; valor: number }>(
-      `SELECT data_vencimento::text AS dia, natureza::text, COALESCE(SUM(valor_aberto),0)::float AS valor
+      `SELECT ${PREV_T}::text AS dia, natureza::text, COALESCE(SUM(valor_aberto),0)::float AS valor
        FROM ${TITULO_RATEADO} t
-       WHERE data_vencimento BETWEEN GREATEST(${pFrom}::date, CURRENT_DATE) AND ${pTo}::date
+       WHERE ${PREV_T} BETWEEN GREATEST(${pFrom}::date, ${HOJE_SQL}) AND ${pTo}::date
          AND valor_aberto > 0
          AND status::text NOT IN ('CANCELADO','PAGO','RECEBIDO','LIQUIDADO')
          ${dimSql(p, filter, tituloCols())}
@@ -872,7 +875,7 @@ function agingStatusClause(natureza: "R" | "P", atrasado: boolean) {
 }
 
 export async function getAgingBi(natureza: "R" | "P", atrasado: boolean, filter?: DimFilter): Promise<AgingSlice[]> {
-  const sign = atrasado ? "CURRENT_DATE - t.data_vencimento" : "t.data_vencimento - CURRENT_DATE";
+  const sign = atrasado ? `${HOJE_SQL} - ${PREV_T}` : `${PREV_T} - ${HOJE_SQL}`;
   const extra = agingStatusClause(natureza, atrasado);
   const b = new Binder();
   const nat = b.add(natureza);
@@ -1160,7 +1163,7 @@ export async function getCheckPanel(from: string, to: string, filter?: DimFilter
        COUNT(DISTINCT t.codigo_titulo_omie) FILTER (WHERE t.numero_documento_fiscal IS NULL OR t.numero_documento_fiscal='')::int AS nfs,
        COUNT(DISTINCT t.codigo_titulo_omie) FILTER (WHERE t.data_emissao IS NULL)::int AS sem_emissao
      FROM ${TITULO_RATEADO} t
-     WHERE COALESCE(t.data_vencimento, t.data_emissao, CURRENT_DATE) BETWEEN ${fromP}::date AND ${toP}::date
+     WHERE COALESCE(t.data_vencimento, t.data_emissao, ${HOJE_SQL}) BETWEEN ${fromP}::date AND ${toP}::date
        ${extra}`,
     bind.values
   );
@@ -1237,7 +1240,7 @@ export async function getBlankDocs(
      LEFT JOIN dim.cliente c ON c.app_key=t.app_key AND c.codigo_cliente_omie=t.codigo_cliente_omie
      LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria
      WHERE (${where})
-       AND COALESCE(t.data_vencimento, t.data_emissao, CURRENT_DATE) BETWEEN ${fromP}::date AND ${toP}::date
+       AND COALESCE(t.data_vencimento, t.data_emissao, ${HOJE_SQL}) BETWEEN ${fromP}::date AND ${toP}::date
        ${extra}
      ORDER BY t.valor_titulo DESC
      LIMIT 80`,
@@ -1473,7 +1476,7 @@ export async function getAnaliseDesvios(
      LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria
      WHERE t.status <> 'CANCELADO'
        AND t.valor_titulo > 0
-       AND COALESCE(t.data_vencimento, t.data_emissao, CURRENT_DATE) BETWEEN ${fromP}::date AND ${toP}::date
+       AND COALESCE(t.data_vencimento, t.data_emissao, ${HOJE_SQL}) BETWEEN ${fromP}::date AND ${toP}::date
        ${natClause}
        ${extra}
      ORDER BY t.data_vencimento DESC

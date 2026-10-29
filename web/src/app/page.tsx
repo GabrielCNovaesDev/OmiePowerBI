@@ -124,7 +124,7 @@ export default async function ResumoPage({
   const pagarLabel = view === "hoje" ? "Pagar hoje" : view === "semana" ? "Pagar na semana" : "Pagar no mês";
   const receberHint =
     view === "hoje"
-      ? "Considerando a data de vencimento · clique para detalhar"
+      ? "Pela previsão de recebimento/pagamento, como no Omie · clique para detalhar"
       : "Títulos em aberto com vencimento daqui até o fim deste recorte · clique para detalhar";
   const previstoLabel = view === "hoje" ? "Saldo previsto hoje" : view === "semana" ? "Saldo previsto no fim da semana" : "Saldo previsto no fim do mês";
   const recorteTitulos = view === "hoje" ? "hoje" : "vencer";
@@ -146,7 +146,7 @@ export default async function ResumoPage({
         valor={kpis.receberHoje}
         qtd={kpis.qtdReceber}
         href={hrefWith(raw, "/titulos", { nat: "R", recorte: recorteTitulos })}
-        headers={["Categoria / Cliente / NF", "Vencimento", "Qtd", "Valor"]}
+        headers={["Categoria / Cliente / NF", "Previsão", "Qtd", "Valor"]}
         rows={receber}
       />
       <CarteiraPanel
@@ -156,7 +156,7 @@ export default async function ResumoPage({
         valor={kpis.pagarHoje}
         qtd={kpis.qtdPagar}
         href={hrefWith(raw, "/titulos", { nat: "P", recorte: recorteTitulos })}
-        headers={["Categoria / Fornecedor / NF", "Vencimento", "Qtd", "Valor"]}
+        headers={["Categoria / Fornecedor / NF", "Previsão", "Qtd", "Valor"]}
         rows={pagar}
       />
       <div className="grid gap-3 md:grid-cols-2">
@@ -271,21 +271,21 @@ async function AtrasadosView({
       <CarteiraPanel
         tone="receive"
         label="Receber atrasado"
-        hint="Títulos em atraso pela data de vencimento · clique para detalhar"
+        hint="Títulos com a previsão vencida · clique para detalhar"
         valor={kpis.receberAtraso}
         qtd={kpis.qtdReceberAtraso}
         href={hrefWith(raw, "/titulos", { nat: "R", recorte: "atraso" })}
-        headers={["Categoria / Cliente / NF", "Vencimento", "Qtd", "Valor"]}
+        headers={["Categoria / Cliente / NF", "Previsão", "Qtd", "Valor"]}
         rows={receber}
       />
       <CarteiraPanel
         tone="pay"
         label="Pagar atrasado"
-        hint="Títulos em atraso pela data de vencimento · clique para detalhar"
+        hint="Títulos com a previsão vencida · clique para detalhar"
         valor={kpis.pagarAtraso}
         qtd={kpis.qtdPagarAtraso}
         href={hrefWith(raw, "/titulos", { nat: "P", recorte: "atraso" })}
-        headers={["Categoria / Fornecedor / NF", "Vencimento", "Qtd", "Valor"]}
+        headers={["Categoria / Fornecedor / NF", "Previsão", "Qtd", "Valor"]}
         rows={pagar}
       />
     </div>

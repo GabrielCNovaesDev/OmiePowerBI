@@ -92,8 +92,9 @@ export default async function TitulosPage({
           Amostra de {data.rows.length} de {data.total} títulos
         </p>
         <DataTable
-          headers={["Vencimento", "Cliente / Fornecedor", "Documento", "NF", "Categoria", "Conta", "Status", "Valor", "Aberto"]}
+          headers={["Previsão", "Vencimento", "Cliente / Fornecedor", "Documento", "NF", "Categoria", "Conta", "Status", "Valor", "Aberto"]}
           rows={data.rows.map((t) => [
+            formatDate(t.data_previsao ?? t.data_vencimento),
             formatDate(t.data_vencimento),
             t.razao_social || "—",
             t.numero_titulo || t.codigo_titulo_omie,
