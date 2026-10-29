@@ -44,11 +44,6 @@ export default async function FluxoLivrePage({
           Esta empresa ainda não tem o de/para de categorias do FCL. Tudo aparece como Não classificado.
         </p>
       ) : null}
-      {dados.naoClassificadas.length ? (
-        <p className="rounded-md border border-line bg-card px-3 py-2 text-sm text-mist">
-          Categorias com movimento sem de/para: {dados.naoClassificadas.join(" · ")}
-        </p>
-      ) : null}
       <FluxoLivreTabela dados={dados} />
     </div>
   );
