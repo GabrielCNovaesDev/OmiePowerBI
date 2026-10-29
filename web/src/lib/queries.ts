@@ -3,6 +3,7 @@ import { n } from "./format";
 import { Binder, dimSql, type DimFilter } from "./params";
 import { TITULO_RATEADO } from "./rateio";
 import { HOJE_SQL } from "./datas-sql";
+import { cacheDados } from "./cache-dados";
 
 export type Empresa = {
   razao_social: string;
@@ -39,7 +40,7 @@ export type KpiHome = {
   lastSync: string | null;
 };
 
-export async function getEmpresa(filter?: DimFilter): Promise<Empresa | null> {
+async function getEmpresaSemCache(filter?: DimFilter): Promise<Empresa | null> {
   const b = new Binder();
   const rows = await query<Empresa>(
     `SELECT razao_social, nome_fantasia, cnpj FROM dim.empresa
@@ -50,7 +51,7 @@ export async function getEmpresa(filter?: DimFilter): Promise<Empresa | null> {
   return rows[0] ?? null;
 }
 
-export async function getResumo(filter?: DimFilter): Promise<Resumo | null> {
+async function getResumoSemCache(filter?: DimFilter): Promise<Resumo | null> {
   const b = new Binder();
   const rows = await query<Record<string, unknown>>(
     `SELECT data_referencia::text, cc_saldo_total, cc_limite_credito,
@@ -80,7 +81,7 @@ export async function getResumo(filter?: DimFilter): Promise<Resumo | null> {
   };
 }
 
-export async function getHomeKpis(filter?: DimFilter): Promise<KpiHome> {
+async function getHomeKpisSemCache(filter?: DimFilter): Promise<KpiHome> {
   const b = new Binder();
   const extraSql = dimSql(b, filter, { appKey: "app_key" });
   const [empresa, resumo, extras, last] = await Promise.all([
@@ -125,7 +126,7 @@ export async function getHomeKpis(filter?: DimFilter): Promise<KpiHome> {
   };
 }
 
-export async function getAging(natureza: "R" | "P", filter?: DimFilter) {
+async function getAgingSemCache(natureza: "R" | "P", filter?: DimFilter) {
   const b = new Binder();
   return query<{ faixa: string; qtd: number; valor: number }>(
     `SELECT faixa_aging AS faixa, COUNT(*)::int AS qtd, COALESCE(SUM(valor_aberto),0)::float AS valor
@@ -137,7 +138,7 @@ export async function getAging(natureza: "R" | "P", filter?: DimFilter) {
   );
 }
 
-export async function getRanking(natureza: "R" | "P", limit = 10, filter?: DimFilter) {
+async function getRankingSemCache(natureza: "R" | "P", limit = 10, filter?: DimFilter) {
   const b = new Binder();
   const nat = b.add(natureza);
   const lim = b.add(limit);
@@ -205,7 +206,7 @@ const TITULO_SELECT = `SELECT t.codigo_titulo_omie::text, t.numero_titulo, c.raz
      LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria
      LEFT JOIN dim.conta_corrente cc ON cc.app_key=t.app_key AND cc.codigo_cc_omie=t.codigo_cc_omie`;
 
-export async function getTitulos(natureza: "R" | "P", limit = 80, filter?: DimFilter): Promise<TituloRow[]> {
+async function getTitulosSemCache(natureza: "R" | "P", limit = 80, filter?: DimFilter): Promise<TituloRow[]> {
   const b = new Binder();
   const nat = b.add(natureza);
   const lim = b.add(limit);
@@ -242,7 +243,7 @@ function recorteClause(recorte?: string): string {
   return "";
 }
 
-export async function getTitulosDrill(opts: {
+async function getTitulosDrillSemCache(opts: {
   natureza?: "R" | "P";
   recorte?: TituloRecorte;
   status?: string;
@@ -289,7 +290,7 @@ export async function getTitulosDrill(opts: {
   return { rows: rows.map(mapTitulo), total: n(a.total), valorAberto: n(a.valor) };
 }
 
-export async function getFluxoMensal(months = 12, filter?: DimFilter) {
+async function getFluxoMensalSemCache(months = 12, filter?: DimFilter) {
   const b = new Binder();
   const m = b.add(months);
   return query<{ mes: string; receber: number; pagar: number }>(
@@ -305,7 +306,7 @@ export async function getFluxoMensal(months = 12, filter?: DimFilter) {
   );
 }
 
-export async function getFluxoProjetado(filter?: DimFilter) {
+async function getFluxoProjetadoSemCache(filter?: DimFilter) {
   const b = new Binder();
   return query<{ data: string; natureza: string; valor: number; qtd: number }>(
     `SELECT data::text, natureza::text, valor_total::float AS valor, qtd_titulos::int AS qtd
@@ -317,7 +318,7 @@ export async function getFluxoProjetado(filter?: DimFilter) {
   );
 }
 
-export async function getFluxoPorCategoria(filter?: DimFilter) {
+async function getFluxoPorCategoriaSemCache(filter?: DimFilter) {
   const b = new Binder();
   return query<{ codigo: string; descricao: string; receber: number; pagar: number }>(
     `SELECT COALESCE(t.codigo_categoria,'(sem)') AS codigo,
@@ -335,7 +336,7 @@ export async function getFluxoPorCategoria(filter?: DimFilter) {
   );
 }
 
-export async function getContas(filter?: DimFilter) {
+async function getContasSemCache(filter?: DimFilter) {
   const b = new Binder();
   return query<{
     codigo_cc_omie: string;
@@ -365,7 +366,7 @@ export async function getContas(filter?: DimFilter) {
   );
 }
 
-export async function getExtrato(limit = 120, filter?: DimFilter) {
+async function getExtratoSemCache(limit = 120, filter?: DimFilter) {
   const b = new Binder();
   const lim = b.add(limit);
   return query<{
@@ -426,7 +427,7 @@ export async function getSyncHealth(filter?: DimFilter) {
   return { logs, rec, counts: counts[0] ?? {} };
 }
 
-export async function getStatusBreakdown(natureza: "R" | "P", filter?: DimFilter) {
+async function getStatusBreakdownSemCache(natureza: "R" | "P", filter?: DimFilter) {
   const b = new Binder();
   const nat = b.add(natureza);
   return query<{ status: string; qtd: number; valor: number }>(
@@ -439,3 +440,18 @@ export async function getStatusBreakdown(natureza: "R" | "P", filter?: DimFilter
     b.values
   );
 }
+
+// Consultas com cache por versão dos dados (ver cache-dados.ts).
+export const getEmpresa = cacheDados("getEmpresa", getEmpresaSemCache);
+export const getResumo = cacheDados("getResumo", getResumoSemCache);
+export const getHomeKpis = cacheDados("getHomeKpis", getHomeKpisSemCache);
+export const getAging = cacheDados("getAging", getAgingSemCache);
+export const getRanking = cacheDados("getRanking", getRankingSemCache);
+export const getTitulos = cacheDados("getTitulos", getTitulosSemCache);
+export const getTitulosDrill = cacheDados("getTitulosDrill", getTitulosDrillSemCache);
+export const getFluxoMensal = cacheDados("getFluxoMensal", getFluxoMensalSemCache);
+export const getFluxoProjetado = cacheDados("getFluxoProjetado", getFluxoProjetadoSemCache);
+export const getFluxoPorCategoria = cacheDados("getFluxoPorCategoria", getFluxoPorCategoriaSemCache);
+export const getContas = cacheDados("getContas", getContasSemCache);
+export const getExtrato = cacheDados("getExtrato", getExtratoSemCache);
+export const getStatusBreakdown = cacheDados("getStatusBreakdown", getStatusBreakdownSemCache);

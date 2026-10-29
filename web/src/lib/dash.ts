@@ -5,6 +5,7 @@ import { todayISO, yearStartISO } from "./period";
 import { Binder, dimSql, type DimFilter } from "./params";
 import { EXTRATO_RATEADO, TITULO_RATEADO, movimentoRealizado } from "./rateio";
 import { HOJE_SQL, previsaoSql } from "./datas-sql";
+import { cacheDados } from "./cache-dados";
 
 const PREV_T = previsaoSql("t");
 
@@ -80,7 +81,7 @@ function tituloAbertoCols() {
   return { ...tituloCols(), contaPadrao: "todas" as const };
 }
 
-export async function getSaldoAtual(filter?: DimFilter) {
+async function getSaldoAtualSemCache(filter?: DimFilter) {
   const b = new Binder();
   const rows = await query<Record<string, unknown>>(`
     SELECT COALESCE(SUM(s.saldo_atual),0)::float AS saldo,
@@ -101,7 +102,7 @@ export async function getSaldoAtual(filter?: DimFilter) {
   return { saldo: n(r.saldo), previsto: n(r.previsto), limite: n(r.limite) };
 }
 
-export async function getSaldoPorConta(filter?: DimFilter) {
+async function getSaldoPorContaSemCache(filter?: DimFilter) {
   const b = new Binder();
   return query<{ conta: string; codigo_banco: string | null; saldo: number; previsto: number; disponivel: number }>(
     `SELECT cc.descricao AS conta, cc.codigo_banco,
@@ -122,7 +123,7 @@ export async function getSaldoPorConta(filter?: DimFilter) {
   );
 }
 
-export async function getSaldoEvolucaoMensal(from: string, to: string, filter?: DimFilter) {
+async function getSaldoEvolucaoMensalSemCache(from: string, to: string, filter?: DimFilter) {
   const b = new Binder();
   const fromP = b.add(from);
   const toP = b.add(to);
@@ -141,11 +142,11 @@ export async function getSaldoEvolucaoMensal(from: string, to: string, filter?: 
   return rows;
 }
 
-export async function getTitulosHoje(natureza: "R" | "P", filter?: DimFilter): Promise<TituloHoje[]> {
+async function getTitulosHojeSemCache(natureza: "R" | "P", filter?: DimFilter): Promise<TituloHoje[]> {
   return getTitulosVencendo(natureza, filter, { mode: "hoje" });
 }
 
-export async function getTitulosVencendo(
+async function getTitulosVencendoSemCache(
   natureza: "R" | "P",
   filter?: DimFilter,
   range?: { mode: "hoje" } | { mode: "periodo"; from: string; to: string } | { mode: "atrasado" }
@@ -185,7 +186,7 @@ export async function getTitulosVencendo(
 }
 
 // Tudo o que está em aberto (atrasado + a vencer), sem recorte de data.
-export async function getTotaisEmAberto(filter?: DimFilter) {
+async function getTotaisEmAbertoSemCache(filter?: DimFilter) {
   const b = new Binder();
   const rows = await query<Record<string, unknown>>(
     `SELECT
@@ -203,11 +204,11 @@ export async function getTotaisEmAberto(filter?: DimFilter) {
   return { receber: n(r.receber), pagar: n(r.pagar), qtdReceber: n(r.qtd_receber), qtdPagar: n(r.qtd_pagar) };
 }
 
-export async function getKpisDia(filter?: DimFilter) {
+async function getKpisDiaSemCache(filter?: DimFilter) {
   return getKpisPeriodo("hoje", "hoje", filter);
 }
 
-export async function getKpisPeriodo(from: string, to: string, filter?: DimFilter) {
+async function getKpisPeriodoSemCache(from: string, to: string, filter?: DimFilter) {
   const b = new Binder();
   const singleDay = from === "hoje" && to === "hoje";
   const fromP = singleDay ? null : b.add(from);
@@ -395,7 +396,7 @@ async function queryFluxoMensalAtual(from: string, to: string, filter?: DimFilte
   );
 }
 
-export async function getFluxoMensalCaixa(from: string, to: string, filter?: DimFilter): Promise<MonthCash[]> {
+async function getFluxoMensalCaixaSemCache(from: string, to: string, filter?: DimFilter): Promise<MonthCash[]> {
   const [opening, used] = await Promise.all([getSaldoAbertura(from, filter), queryFluxoMensalAtual(from, to, filter)]);
   let acc = opening;
   return used.map((m) => {
@@ -419,7 +420,7 @@ export async function getFluxoMensalCaixa(from: string, to: string, filter?: Dim
   });
 }
 
-export async function getFluxoMensalPrevisto(from: string, to: string, filter?: DimFilter): Promise<MonthCash[]> {
+async function getFluxoMensalPrevistoSemCache(from: string, to: string, filter?: DimFilter): Promise<MonthCash[]> {
   const keys = monthKeys(from, to);
   const rangeFrom = keys[0] ? `${keys[0]}-01` : from;
   const [saldo, raw] = await Promise.all([getSaldoAtual(filter), queryPrevistoMensal(rangeFrom, to, filter)]);
@@ -435,7 +436,7 @@ export async function getFluxoMensalPrevisto(from: string, to: string, filter?: 
   );
 }
 
-export async function getFluxoMensalAtualPrevisto(from: string, to: string, filter?: DimFilter): Promise<MonthCashCompare[]> {
+async function getFluxoMensalAtualPrevistoSemCache(from: string, to: string, filter?: DimFilter): Promise<MonthCashCompare[]> {
   const todayYm = todayISO().slice(0, 7);
   const keys = monthKeys(from, to);
   const rangeFrom = keys[0] ? `${keys[0]}-01` : from;
@@ -766,7 +767,7 @@ export function buildFluxoDrillTree(facts: FluxoDrillFact[]): FluxoDrillNode[] {
   return roots;
 }
 
-export async function getFluxoDrilldown(
+async function getFluxoDrilldownSemCache(
   from: string,
   to: string,
   filter: DimFilter | undefined,
@@ -775,7 +776,7 @@ export async function getFluxoDrilldown(
   return buildFluxoDrillTree(await getFluxoDrillFacts(from, to, filter, fonte));
 }
 
-export async function getFluxoDrilldownHibrido(
+async function getFluxoDrilldownHibridoSemCache(
   from: string,
   to: string,
   filter: DimFilter | undefined,
@@ -803,7 +804,7 @@ export async function getFluxoDrilldownHibrido(
   return buildFluxoDrillTree([...map.values()]);
 }
 
-export async function getFluxoDiarioMes(from: string, to: string, filter?: DimFilter): Promise<DailyPoint[]> {
+async function getFluxoDiarioMesSemCache(from: string, to: string, filter?: DimFilter): Promise<DailyPoint[]> {
   const a = new Binder();
   const aFrom = a.add(from);
   const aTo = a.add(to);
@@ -880,7 +881,7 @@ function agingStatusClause(natureza: "R" | "P", atrasado: boolean) {
   return atrasado ? `AND t.status = 'ATRASADO'` : `AND t.status <> 'ATRASADO' AND t.status ${openClause(natureza)}`;
 }
 
-export async function getAgingBi(natureza: "R" | "P", atrasado: boolean, filter?: DimFilter): Promise<AgingSlice[]> {
+async function getAgingBiSemCache(natureza: "R" | "P", atrasado: boolean, filter?: DimFilter): Promise<AgingSlice[]> {
   const sign = atrasado ? `${HOJE_SQL} - ${PREV_T}` : `${PREV_T} - ${HOJE_SQL}`;
   const extra = agingStatusClause(natureza, atrasado);
   const b = new Binder();
@@ -904,7 +905,7 @@ export async function getAgingBi(natureza: "R" | "P", atrasado: boolean, filter?
   );
 }
 
-export async function getAgingByDim(
+async function getAgingByDimSemCache(
   natureza: "R" | "P",
   atrasado: boolean,
   dim: "categoria" | "cliente",
@@ -960,7 +961,7 @@ function kindSql(kind: Kind) {
   ))`;
 }
 
-export async function getBreakdown(kind: Kind, from: string, to: string, base: "caixa" | "comp", filter?: DimFilter) {
+async function getBreakdownSemCache(kind: Kind, from: string, to: string, base: "caixa" | "comp", filter?: DimFilter) {
   // Caixa: só o que foi efetivamente recebido/pago (baixas + lançamentos diretos
   // em conta), como "Recebimentos/Pagamentos realizados" da Omie.
   // Competência: títulos pela data de emissão (ou registro, quando não há emissão).
@@ -973,32 +974,58 @@ export async function getBreakdown(kind: Kind, from: string, to: string, base: "
   const fromP = b.add(from);
   const toP = b.add(to);
   const dims = dimSql(b, filter, tituloCols());
-  const join = `
-    FROM ${source} t
-    LEFT JOIN dim.cliente c ON c.app_key=t.app_key AND c.codigo_cliente_omie=t.codigo_cliente_omie
-    LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria
-    LEFT JOIN dim.dre d ON d.app_key=t.app_key AND d.codigo_dre=cat.codigo_dre
-    WHERE ${filtro}
-      ${caixa ? "" : "AND t.status::text <> 'CANCELADO'"}
-      AND ${dateCol} BETWEEN ${fromP}::date AND ${toP}::date
-      ${dims}
-  `;
 
-  const [totalRows, cnpj, status, uf, clientes, categorias, projetos] = await Promise.all([
-    query<{ valor: number }>(`SELECT COALESCE(SUM(${valueCol}),0)::float AS valor ${join}`, b.values),
-    query<NamedValue>(`SELECT COALESCE(c.cnpj_cpf, '(sem CNPJ)') AS nome, COALESCE(SUM(${valueCol}),0)::float AS valor ${join} GROUP BY 1 ORDER BY valor DESC LIMIT 8`, b.values),
-    query<NamedValue>(`SELECT t.status::text AS nome, COALESCE(SUM(${valueCol}),0)::float AS valor ${join} GROUP BY 1 ORDER BY valor DESC`, b.values),
-    query<NamedValue>(`SELECT COALESCE(NULLIF(c.estado,''), '(sem UF)') AS nome, COALESCE(SUM(${valueCol}),0)::float AS valor ${join} GROUP BY 1 ORDER BY valor DESC`, b.values),
-    query<NamedValue>(`SELECT COALESCE(c.razao_social,'(sem cadastro)') AS nome, MAX(c.cnpj_cpf) AS cnpj, COALESCE(SUM(${valueCol}),0)::float AS valor ${join} GROUP BY 1 ORDER BY valor DESC LIMIT 15`, b.values),
-    query<NamedValue>(`SELECT COALESCE(cat.descricao, t.codigo_categoria, '(sem categoria)') AS nome, COALESCE(SUM(${valueCol}),0)::float AS valor ${join} GROUP BY 1 ORDER BY valor DESC LIMIT 12`, b.values),
-    query<NamedValue>(`SELECT COALESCE(t.codigo_projeto::text, '(em branco)') AS nome, COALESCE(SUM(${valueCol}),0)::float AS valor ${join} GROUP BY 1 ORDER BY valor DESC LIMIT 8`, b.values),
-  ]);
+  // Uma ida ao banco só. A base (período + filtros) é materializada antes de
+  // juntar os cadastros: sem isso o planejador estima 1 linha para a relação
+  // rateada e escolhe laços aninhados (~300 ms por agrupamento).
+  const rows = await query<{ dim: string; nome: string; cnpj: string | null; valor: number }>(
+    `WITH mov AS MATERIALIZED (
+       SELECT t.app_key, ${dateCol} AS data, ${valueCol} AS valor, t.natureza, t.status::text AS status,
+              t.codigo_categoria, t.codigo_cliente_omie, t.codigo_projeto
+       FROM ${source} t
+       WHERE ${dateCol} BETWEEN ${fromP}::date AND ${toP}::date
+         ${caixa ? "" : "AND t.status::text <> 'CANCELADO'"}
+         ${dims}
+     ),
+     base AS MATERIALIZED (
+       SELECT t.valor, t.status, t.codigo_categoria, t.codigo_projeto,
+              c.cnpj_cpf, c.razao_social, c.estado, cat.descricao AS cat_descricao
+       FROM mov t
+       LEFT JOIN dim.cliente c ON c.app_key=t.app_key AND c.codigo_cliente_omie=t.codigo_cliente_omie
+       LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria
+       LEFT JOIN dim.dre d ON d.app_key=t.app_key AND d.codigo_dre=cat.codigo_dre
+       WHERE ${filtro}
+     )
+     SELECT 'cnpj' AS dim, COALESCE(cnpj_cpf, '(sem CNPJ)') AS nome, NULL AS cnpj, SUM(valor)::float AS valor FROM base GROUP BY 2
+     UNION ALL SELECT 'status', status, NULL, SUM(valor)::float FROM base GROUP BY 2
+     UNION ALL SELECT 'uf', COALESCE(NULLIF(estado,''), '(sem UF)'), NULL, SUM(valor)::float FROM base GROUP BY 2
+     UNION ALL SELECT 'cliente', COALESCE(razao_social,'(sem cadastro)'), MAX(cnpj_cpf), SUM(valor)::float FROM base GROUP BY 2
+     UNION ALL SELECT 'categoria', COALESCE(cat_descricao, codigo_categoria, '(sem categoria)'), NULL, SUM(valor)::float FROM base GROUP BY 2
+     UNION ALL SELECT 'projeto', COALESCE(codigo_projeto::text, '(em branco)'), NULL, SUM(valor)::float FROM base GROUP BY 2`,
+    b.values
+  );
 
-  const total = n(totalRows[0]?.valor);
-  return { total, cnpj, status, uf, clientes, categorias, projetos };
+  const top = (dim: string, limit?: number): NamedValue[] => {
+    const list = rows
+      .filter((r) => r.dim === dim)
+      .map((r) => ({ nome: r.nome, valor: n(r.valor), ...(r.cnpj ? { cnpj: r.cnpj } : {}) }))
+      .sort((a, b2) => b2.valor - a.valor);
+    return limit ? list.slice(0, limit) : list;
+  };
+  const status = top("status");
+  const total = status.reduce((s, x) => s + x.valor, 0);
+  return {
+    total,
+    cnpj: top("cnpj", 8),
+    status,
+    uf: top("uf"),
+    clientes: top("cliente", 15),
+    categorias: top("categoria", 12),
+    projetos: top("projeto", 8),
+  };
 }
 
-export async function getResultado(from: string, to: string, filter?: DimFilter) {
+async function getResultadoSemCache(from: string, to: string, filter?: DimFilter) {
   const b = new Binder();
   const fromP = b.add(from);
   const toP = b.add(to);
@@ -1027,7 +1054,7 @@ export async function getResultado(from: string, to: string, filter?: DimFilter)
   return { receita, custos, despesas, bruto, ebitda, resultado: ebitda };
 }
 
-export async function getResultadoMensal(from: string, to: string, filter?: DimFilter) {
+async function getResultadoMensalSemCache(from: string, to: string, filter?: DimFilter) {
   const b = new Binder();
   const fromP = b.add(from);
   const toP = b.add(to);
@@ -1057,7 +1084,7 @@ export async function getResultadoMensal(from: string, to: string, filter?: DimF
   );
 }
 
-export async function getDreLinhas(from: string, to: string, filter?: DimFilter) {
+async function getDreLinhasSemCache(from: string, to: string, filter?: DimFilter) {
   const b = new Binder();
   const fromP = b.add(from);
   const toP = b.add(to);
@@ -1079,7 +1106,7 @@ export async function getDreLinhas(from: string, to: string, filter?: DimFilter)
   );
 }
 
-export async function getOrcamentoMensal(year?: number, filter?: DimFilter) {
+async function getOrcamentoMensalSemCache(year?: number, filter?: DimFilter) {
   const y = year ?? new Date().getFullYear();
   const b = new Binder();
   const yearP = b.add(y);
@@ -1101,7 +1128,7 @@ export async function getOrcamentoMensal(year?: number, filter?: DimFilter) {
   );
 }
 
-export async function getQaClientes(from: string, to: string, filter?: DimFilter) {
+async function getQaClientesSemCache(from: string, to: string, filter?: DimFilter) {
   const currentB = new Binder();
   const cFrom = currentB.add(from);
   const cTo = currentB.add(to);
@@ -1155,7 +1182,7 @@ function shiftYear(isoDate: string, years: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-export async function getCheckPanel(from: string, to: string, filter?: DimFilter) {
+async function getCheckPanelSemCache(from: string, to: string, filter?: DimFilter) {
   const bind = new Binder();
   const fromP = bind.add(from);
   const toP = bind.add(to);
@@ -1207,7 +1234,7 @@ export async function getCheckPanel(from: string, to: string, filter?: DimFilter
   return items;
 }
 
-export async function getBlankDocs(
+async function getBlankDocsSemCache(
   from: string,
   to: string,
   field: "projetos" | "clientes" | "categorias" | "departamentos" | "nfs",
@@ -1254,7 +1281,7 @@ export async function getBlankDocs(
   );
 }
 
-export async function getInadimplenciaMensal(filter?: DimFilter) {
+async function getInadimplenciaMensalSemCache(filter?: DimFilter) {
   const from = yearStartISO();
   const b = new Binder();
   const fromP = b.add(from);
@@ -1272,7 +1299,7 @@ export async function getInadimplenciaMensal(filter?: DimFilter) {
   );
 }
 
-export async function getEntradasSaidas(from: string, to: string, filter?: DimFilter) {
+async function getEntradasSaidasSemCache(from: string, to: string, filter?: DimFilter) {
   async function slice(natureza: "R" | "P", by: "cat" | "cli") {
     const b = new Binder();
     const fromP = b.add(from);
@@ -1303,7 +1330,7 @@ export async function getEntradasSaidas(from: string, to: string, filter?: DimFi
   return { recCat, recCli, pagCat, pagForn };
 }
 
-export async function getNfs(from: string, to: string, filter?: DimFilter) {
+async function getNfsSemCache(from: string, to: string, filter?: DimFilter) {
   const b = new Binder();
   const fromP = b.add(from);
   const toP = b.add(to);
@@ -1457,7 +1484,7 @@ type DesvioDoc = {
   cliente: string;
 };
 
-export async function getAnaliseDesvios(
+async function getAnaliseDesviosSemCache(
   from: string,
   to: string,
   filter?: DimFilter,
@@ -1582,3 +1609,33 @@ export async function getAnaliseDesvios(
     rows,
   };
 }
+
+// Consultas com cache por versão dos dados (ver cache-dados.ts).
+export const getSaldoAtual = cacheDados("getSaldoAtual", getSaldoAtualSemCache);
+export const getSaldoPorConta = cacheDados("getSaldoPorConta", getSaldoPorContaSemCache);
+export const getSaldoEvolucaoMensal = cacheDados("getSaldoEvolucaoMensal", getSaldoEvolucaoMensalSemCache);
+export const getTitulosHoje = cacheDados("getTitulosHoje", getTitulosHojeSemCache);
+export const getTitulosVencendo = cacheDados("getTitulosVencendo", getTitulosVencendoSemCache);
+export const getTotaisEmAberto = cacheDados("getTotaisEmAberto", getTotaisEmAbertoSemCache);
+export const getKpisDia = cacheDados("getKpisDia", getKpisDiaSemCache);
+export const getKpisPeriodo = cacheDados("getKpisPeriodo", getKpisPeriodoSemCache);
+export const getFluxoMensalCaixa = cacheDados("getFluxoMensalCaixa", getFluxoMensalCaixaSemCache);
+export const getFluxoMensalPrevisto = cacheDados("getFluxoMensalPrevisto", getFluxoMensalPrevistoSemCache);
+export const getFluxoMensalAtualPrevisto = cacheDados("getFluxoMensalAtualPrevisto", getFluxoMensalAtualPrevistoSemCache);
+export const getFluxoDrilldown = cacheDados("getFluxoDrilldown", getFluxoDrilldownSemCache);
+export const getFluxoDrilldownHibrido = cacheDados("getFluxoDrilldownHibrido", getFluxoDrilldownHibridoSemCache);
+export const getFluxoDiarioMes = cacheDados("getFluxoDiarioMes", getFluxoDiarioMesSemCache);
+export const getAgingBi = cacheDados("getAgingBi", getAgingBiSemCache);
+export const getAgingByDim = cacheDados("getAgingByDim", getAgingByDimSemCache);
+export const getBreakdown = cacheDados("getBreakdown", getBreakdownSemCache);
+export const getResultado = cacheDados("getResultado", getResultadoSemCache);
+export const getResultadoMensal = cacheDados("getResultadoMensal", getResultadoMensalSemCache);
+export const getDreLinhas = cacheDados("getDreLinhas", getDreLinhasSemCache);
+export const getOrcamentoMensal = cacheDados("getOrcamentoMensal", getOrcamentoMensalSemCache);
+export const getQaClientes = cacheDados("getQaClientes", getQaClientesSemCache);
+export const getCheckPanel = cacheDados("getCheckPanel", getCheckPanelSemCache);
+export const getBlankDocs = cacheDados("getBlankDocs", getBlankDocsSemCache);
+export const getInadimplenciaMensal = cacheDados("getInadimplenciaMensal", getInadimplenciaMensalSemCache);
+export const getEntradasSaidas = cacheDados("getEntradasSaidas", getEntradasSaidasSemCache);
+export const getNfs = cacheDados("getNfs", getNfsSemCache);
+export const getAnaliseDesvios = cacheDados("getAnaliseDesvios", getAnaliseDesviosSemCache);
