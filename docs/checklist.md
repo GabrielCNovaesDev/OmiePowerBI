@@ -44,6 +44,11 @@ Detalhes técnicos em [analise-tecnica.md](analise-tecnica.md).
 - [x] "Hoje" calculado no fuso de São Paulo (depois das 21h o BI já mostrava o dia seguinte)
 - [x] Prazos de títulos em aberto pela previsão de recebimento/pagamento, como o Omie (hoje/semana/mês, fluxo previsto, faixas de dias); listas com colunas Previsão e Vencimento
 
+## Desempenho
+- [x] App na Vercel em São Paulo (gru1), junto do banco — telas 2–2,6× mais rápidas
+- [x] Receitas/Custos/Despesas em uma consulta só (~2 s → ~0,2 s)
+- [x] Cache das consultas, renovado sozinho a cada carga da Omie (versão = fim da última etapa em ops.sync_log)
+
 ## Segurança e limpeza
 - [x] Check Panel mostrava pendências de outras empresas (filtro sem parênteses)
 - [x] Middleware de login nunca rodava (estava fora de `src/`): agora redireciona e protege `/admin` na borda
