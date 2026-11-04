@@ -62,6 +62,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   let papel = session.user.papel;
   let hiddenRoutes: string[] = papel === "desenvolvedor" ? [] : [ROTA_DESENVOLVEDOR];
   let hiddenPorEmpresa: Record<string, string[]> = {};
+  let lastSyncPorEmpresa: Record<string, string> = {};
 
   if (isAdminPath) {
     return (
@@ -87,18 +88,21 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     hiddenPorEmpresa = Object.fromEntries(
       tenant.empresas.map((e) => [e.app_key, rotasOcultas(e.modulos_desativados ?? [], dev)])
     );
-    const filter = { appKeys: tenant.selectedKeys };
+    // Última carga de cada empresa; o consolidado mostra a mais recente delas.
+    const filter = { appKeys: tenant.allowedKeys };
     const b = new Binder();
-    const rows = await query<{ ts: string; status: string; metodo: string }>(
-      `SELECT COALESCE(finished_at, started_at)::text AS ts, status::text, metodo
+    const rows = await query<{ app_key: string; ts: string; status: string; metodo: string }>(
+      `SELECT DISTINCT ON (app_key) app_key, COALESCE(finished_at, started_at)::text AS ts, status::text, metodo
        FROM ops.sync_log
        WHERE TRUE ${dimSql(b, filter, { appKey: "app_key" })}
-       ORDER BY started_at DESC LIMIT 1`,
+       ORDER BY app_key, started_at DESC`,
       b.values
     );
-    const last = rows[0];
-    if (last?.status === "running") lastSync = `Carga em andamento (${last.metodo})`;
-    else if (last?.ts) lastSync = formatDateTime(last.ts);
+    const texto = (r: (typeof rows)[number]) =>
+      r.status === "running" ? `Carga em andamento (${r.metodo})` : r.ts ? formatDateTime(r.ts) : null;
+    lastSyncPorEmpresa = Object.fromEntries(rows.flatMap((r) => (texto(r) ? [[r.app_key, texto(r)!]] : [])));
+    const consolidado = rows.find((r) => r.status === "running") ?? [...rows].sort((x, y) => y.ts.localeCompare(x.ts))[0];
+    if (consolidado) lastSync = texto(consolidado);
     filterOptions = {
       categorias: [],
       contas: [],
@@ -121,6 +125,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <Shell
             company={company}
             lastSync={lastSync}
+            lastSyncPorEmpresa={lastSyncPorEmpresa}
             filterOptions={filterOptions}
             userName={tenantName}
             papel={papel}

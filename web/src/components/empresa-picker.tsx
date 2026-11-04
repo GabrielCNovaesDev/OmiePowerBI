@@ -61,3 +61,11 @@ export function EmpresaPicker({
     </label>
   );
 }
+
+// O layout raiz não re-renderiza quando só muda ?empresa=, então a data da última
+// carga de cada empresa vem pronta e é escolhida aqui pela URL.
+export function UltimaCarga({ consolidado, porEmpresa }: { consolidado: string | null; porEmpresa: Record<string, string> }) {
+  const empresa = useSearchParams().get("empresa");
+  const texto = (empresa && porEmpresa[empresa]) || consolidado;
+  return <p>{texto ? (texto.startsWith("Carga") ? texto : `Atualizado ${texto}`) : "Aguardando primeira carga"}</p>;
+}

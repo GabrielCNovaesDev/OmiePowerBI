@@ -1,6 +1,6 @@
 import { podeAdministrar } from "@/auth.config";
 import { BrandMark } from "./brand";
-import { EmpresaPicker } from "./empresa-picker";
+import { EmpresaPicker, UltimaCarga } from "./empresa-picker";
 import { DashTabs, ReportNav } from "./nav";
 import { FilterRail, type FilterOptions } from "./filters";
 import { SessionMenu } from "./session-menu";
@@ -9,6 +9,7 @@ export function Shell({
   children,
   company,
   lastSync,
+  lastSyncPorEmpresa = {},
   filterOptions,
   userName,
   papel,
@@ -18,6 +19,7 @@ export function Shell({
   children: React.ReactNode;
   company?: string | null;
   lastSync?: string | null;
+  lastSyncPorEmpresa?: Record<string, string>;
   filterOptions?: FilterOptions | null;
   userName?: string | null;
   papel?: string | null;
@@ -39,7 +41,7 @@ export function Shell({
             canPick={Boolean(filterOptions?.canPickEmpresa)}
             fallbackLabel={company}
           />
-          <p>{lastSync ? `Atualizado ${lastSync}` : "Aguardando primeira carga"}</p>
+          <UltimaCarga consolidado={lastSync ?? null} porEmpresa={lastSyncPorEmpresa} />
           {userName ? <SessionMenu name={userName} papel={papel || ""} showAdmin={podeAdministrar(papel)} /> : null}
         </div>
       </header>
