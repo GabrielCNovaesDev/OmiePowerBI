@@ -371,6 +371,19 @@ const TITULO_CONSIDERADO = `
   JOIN dim.conta_corrente cc ON cc.app_key=t.app_key AND cc.codigo_cc_omie=t.codigo_cc_omie
   WHERE t.app_key=$1 AND COALESCE(cc.visivel_resumo,'S')='S' AND t.valor_aberto > 0`;
 
+// Boleto a receber com previsão no último dia útil: a API devolve ATRASADO, mas
+// o Resumo conta como "vence hoje" (D+1 do banco). Mesma regra de boletoD1Sql
+// em web/src/lib/datas-sql.ts.
+const HOJE_BR = `(now() AT TIME ZONE 'America/Sao_Paulo')::date`;
+const BOLETO_D1 = `(NULLIF(t.numero_boleto, '') IS NOT NULL
+  AND COALESCE(t.data_previsao, t.data_vencimento) < ${HOJE_BR}
+  AND COALESCE(t.data_previsao, t.data_vencimento) >= (
+    SELECT MAX(g.d)::date
+    FROM generate_series(${HOJE_BR} - 7, ${HOJE_BR} - 1, interval '1 day') AS g(d)
+    WHERE EXTRACT(ISODOW FROM g.d) < 6
+      AND to_char(g.d, 'MM-DD') NOT IN ('01-01','04-21','05-01','09-07','10-12','11-02','11-15','11-20','12-25')
+  ))`;
+
 async function reconcile() {
   const app = appKey();
   const resumo = (col) =>
@@ -389,7 +402,7 @@ async function reconcile() {
     {
       metrica: "ar_valor_atraso",
       omie: resumo("ar_valor_atraso"),
-      bi: `SELECT COALESCE(SUM(t.valor_aberto),0) AS v ${TITULO_CONSIDERADO} AND t.natureza='R' AND t.status='ATRASADO'`,
+      bi: `SELECT COALESCE(SUM(t.valor_aberto),0) AS v ${TITULO_CONSIDERADO} AND t.natureza='R' AND t.status='ATRASADO' AND NOT ${BOLETO_D1}`,
     },
     {
       metrica: "ap_valor_atraso",

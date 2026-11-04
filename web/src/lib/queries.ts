@@ -2,7 +2,7 @@ import { query } from "./db";
 import { n } from "./format";
 import { Binder, dimSql, type DimFilter } from "./params";
 import { TITULO_RATEADO } from "./rateio";
-import { HOJE_SQL } from "./datas-sql";
+import { HOJE_SQL, atrasadoSql, previsaoEfetivaSql } from "./datas-sql";
 import { cacheDados } from "./cache-dados";
 
 export type Empresa = {
@@ -91,10 +91,10 @@ async function getHomeKpisSemCache(filter?: DimFilter): Promise<KpiHome> {
       `SELECT
         COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='R' AND status NOT IN ('CANCELADO','RECEBIDO','LIQUIDADO')),0) AS ar_aberto,
         COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='P' AND status NOT IN ('CANCELADO','PAGO','LIQUIDADO')),0) AS ap_aberto,
-        COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='R' AND status='ATRASADO'),0) AS ar_atraso,
+        COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='R' AND ${atrasadoSql()}),0) AS ar_atraso,
         COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='P' AND status='ATRASADO'),0) AS ap_atraso,
-        COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='R' AND status NOT IN ('CANCELADO','RECEBIDO','LIQUIDADO') AND COALESCE(data_previsao, data_vencimento) BETWEEN ${HOJE_SQL} AND ${HOJE_SQL} + 7),0) AS rec7,
-        COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='R' AND status NOT IN ('CANCELADO','RECEBIDO','LIQUIDADO') AND COALESCE(data_previsao, data_vencimento) BETWEEN ${HOJE_SQL} AND ${HOJE_SQL} + 30),0) AS rec30,
+        COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='R' AND status NOT IN ('CANCELADO','RECEBIDO','LIQUIDADO') AND ${previsaoEfetivaSql()} BETWEEN ${HOJE_SQL} AND ${HOJE_SQL} + 7),0) AS rec7,
+        COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='R' AND status NOT IN ('CANCELADO','RECEBIDO','LIQUIDADO') AND ${previsaoEfetivaSql()} BETWEEN ${HOJE_SQL} AND ${HOJE_SQL} + 30),0) AS rec30,
         COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='P' AND status NOT IN ('CANCELADO','PAGO','LIQUIDADO') AND COALESCE(data_previsao, data_vencimento) BETWEEN ${HOJE_SQL} AND ${HOJE_SQL} + 7),0) AS pag7,
         COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='P' AND status NOT IN ('CANCELADO','PAGO','LIQUIDADO') AND COALESCE(data_previsao, data_vencimento) BETWEEN ${HOJE_SQL} AND ${HOJE_SQL} + 30),0) AS pag30
       FROM fato.titulo
@@ -215,7 +215,7 @@ async function getTitulosSemCache(natureza: "R" | "P", limit = 80, filter?: DimF
      WHERE t.natureza=${nat}
        ${dimSql(b, filter, { appKey: "t.app_key", cliente: "t.codigo_cliente_omie", categoria: "t.codigo_categoria", conta: "t.codigo_cc_omie", departamento: "t.codigo_departamento", contaPadrao: "todas" })}
      ORDER BY
-       CASE WHEN t.status IN ('ATRASADO') THEN 0
+       CASE WHEN ${atrasadoSql("t")} THEN 0
             WHEN t.status IN ('VENCEHOJE','AVENCER','EMABERTO','PAGTO_PARCIAL') THEN 1
             ELSE 2 END,
        COALESCE(t.data_previsao, t.data_vencimento) ASC NULLS LAST
@@ -229,13 +229,13 @@ export type TituloRecorte = "hoje" | "atraso" | "vencer" | "aberto";
 
 function recorteClause(recorte?: string): string {
   if (recorte === "hoje") {
-    return `AND COALESCE(t.data_previsao, t.data_vencimento) = ${HOJE_SQL} AND t.valor_aberto > 0 AND t.status::text NOT IN ('CANCELADO','PAGO','RECEBIDO','LIQUIDADO')`;
+    return `AND ${previsaoEfetivaSql("t")} = ${HOJE_SQL} AND t.valor_aberto > 0 AND t.status::text NOT IN ('CANCELADO','PAGO','RECEBIDO','LIQUIDADO')`;
   }
   if (recorte === "atraso") {
-    return `AND t.status = 'ATRASADO' AND t.valor_aberto > 0`;
+    return `AND ${atrasadoSql("t")} AND t.valor_aberto > 0`;
   }
   if (recorte === "vencer") {
-    return `AND t.status <> 'ATRASADO' AND t.valor_aberto > 0 AND t.status::text NOT IN ('CANCELADO','PAGO','RECEBIDO','LIQUIDADO')`;
+    return `AND NOT ${atrasadoSql("t")} AND t.valor_aberto > 0 AND t.status::text NOT IN ('CANCELADO','PAGO','RECEBIDO','LIQUIDADO')`;
   }
   if (recorte === "aberto") {
     return `AND t.valor_aberto > 0 AND t.status::text NOT IN ('CANCELADO','PAGO','RECEBIDO','LIQUIDADO')`;
@@ -272,7 +272,7 @@ async function getTitulosDrillSemCache(opts: {
       `${TITULO_SELECT}
        WHERE ${where}
        ORDER BY
-         CASE WHEN t.status IN ('ATRASADO') THEN 0
+         CASE WHEN ${atrasadoSql("t")} THEN 0
               WHEN t.status IN ('VENCEHOJE','AVENCER','EMABERTO','PAGTO_PARCIAL') THEN 1
               ELSE 2 END,
          COALESCE(t.data_previsao, t.data_vencimento) ASC NULLS LAST

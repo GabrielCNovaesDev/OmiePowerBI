@@ -2,7 +2,7 @@ import { query } from "./db";
 import { n } from "./format";
 import { Binder, dimSql, type DimFilter } from "./params-shared";
 import { EXTRATO_RATEADO, TITULO_RATEADO } from "./rateio";
-import { HOJE_SQL, previsaoSql } from "./datas-sql";
+import { HOJE_SQL, previsaoEfetivaSql } from "./datas-sql";
 import { todayISO } from "./period";
 import { cacheDados } from "./cache-dados";
 
@@ -70,7 +70,7 @@ async function getFluxoLivreSemCache(ano: number, filter?: DimFilter): Promise<F
   const ate = `${ano}-12-31`;
   const hoje = todayISO();
   const mesAtual = hoje.slice(0, 7);
-  const prev = previsaoSql("t");
+  const prev = previsaoEfetivaSql("t");
 
   const bReal = new Binder();
   const pDe = bReal.add(de);

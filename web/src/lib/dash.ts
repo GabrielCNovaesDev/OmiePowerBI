@@ -4,10 +4,12 @@ import { n } from "./format";
 import { todayISO, yearStartISO } from "./period";
 import { Binder, dimSql, type DimFilter } from "./params";
 import { EXTRATO_RATEADO, TITULO_RATEADO, movimentoRealizado } from "./rateio";
-import { HOJE_SQL, previsaoSql } from "./datas-sql";
+import { HOJE_SQL, atrasadoSql, previsaoEfetivaSql, previsaoSql } from "./datas-sql";
 import { cacheDados } from "./cache-dados";
 
 const PREV_T = previsaoSql("t");
+const PREV_EF_T = previsaoEfetivaSql("t");
+const ATRASADO_T = atrasadoSql("t");
 
 const MOVIMENTO_REALIZADO = movimentoRealizado();
 
@@ -156,11 +158,11 @@ async function getTitulosVencendoSemCache(
   const recorte = range ?? { mode: "hoje" as const };
   const dateClause =
     recorte.mode === "atrasado"
-      ? `AND t.status = 'ATRASADO'`
+      ? `AND ${ATRASADO_T}`
       : recorte.mode === "periodo"
-        ? `AND ${PREV_T} BETWEEN ${b.add(recorte.from)}::date AND ${b.add(recorte.to)}::date
+        ? `AND ${PREV_EF_T} BETWEEN ${b.add(recorte.from)}::date AND ${b.add(recorte.to)}::date
            AND t.status ${openClause(natureza)}`
-        : `AND ${PREV_T} = ${HOJE_SQL}
+        : `AND ${PREV_EF_T} = ${HOJE_SQL}
            AND t.status ${openClause(natureza)}`;
   const orderBy = recorte.mode === "atrasado" ? "vencimento ASC NULLS LAST, valor DESC" : "valor DESC";
   return query<TituloHoje>(
@@ -214,8 +216,8 @@ async function getKpisPeriodoSemCache(from: string, to: string, filter?: DimFilt
   const fromP = singleDay ? null : b.add(from);
   const toP = singleDay ? null : b.add(to);
   const vencR = singleDay
-    ? `natureza='R' AND status ${OPEN_R} AND COALESCE(data_previsao, data_vencimento) = ${HOJE_SQL} AND valor_aberto > 0`
-    : `natureza='R' AND status ${OPEN_R} AND COALESCE(data_previsao, data_vencimento) BETWEEN ${fromP}::date AND ${toP}::date AND valor_aberto > 0`;
+    ? `natureza='R' AND status ${OPEN_R} AND ${PREV_EF_T} = ${HOJE_SQL} AND valor_aberto > 0`
+    : `natureza='R' AND status ${OPEN_R} AND ${PREV_EF_T} BETWEEN ${fromP}::date AND ${toP}::date AND valor_aberto > 0`;
   const vencP = singleDay
     ? `natureza='P' AND status ${OPEN_P} AND COALESCE(data_previsao, data_vencimento) = ${HOJE_SQL} AND valor_aberto > 0`
     : `natureza='P' AND status ${OPEN_P} AND COALESCE(data_previsao, data_vencimento) BETWEEN ${fromP}::date AND ${toP}::date AND valor_aberto > 0`;
@@ -223,11 +225,11 @@ async function getKpisPeriodoSemCache(from: string, to: string, filter?: DimFilt
     SELECT
       COALESCE(SUM(valor_aberto) FILTER (WHERE ${vencR}),0)::float AS receber_hoje,
       COALESCE(SUM(valor_aberto) FILTER (WHERE ${vencP}),0)::float AS pagar_hoje,
-      COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='R' AND status='ATRASADO'),0)::float AS receber_atraso,
+      COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='R' AND ${ATRASADO_T}),0)::float AS receber_atraso,
       COALESCE(SUM(valor_aberto) FILTER (WHERE natureza='P' AND status='ATRASADO'),0)::float AS pagar_atraso,
       COUNT(DISTINCT t.codigo_titulo_omie) FILTER (WHERE ${vencR})::int AS qtd_receber,
       COUNT(DISTINCT t.codigo_titulo_omie) FILTER (WHERE ${vencP})::int AS qtd_pagar,
-      COUNT(DISTINCT t.codigo_titulo_omie) FILTER (WHERE natureza='R' AND status='ATRASADO')::int AS qtd_receber_atraso,
+      COUNT(DISTINCT t.codigo_titulo_omie) FILTER (WHERE natureza='R' AND ${ATRASADO_T})::int AS qtd_receber_atraso,
       COUNT(DISTINCT t.codigo_titulo_omie) FILTER (WHERE natureza='P' AND status='ATRASADO')::int AS qtd_pagar_atraso
     FROM ${TITULO_RATEADO} t
     WHERE 1=1 ${dimSql(b, filter, tituloAbertoCols())}
@@ -826,9 +828,9 @@ async function getFluxoDiarioMesSemCache(from: string, to: string, filter?: DimF
       a.values
     ),
     query<{ dia: string; natureza: string; valor: number }>(
-      `SELECT ${PREV_T}::text AS dia, natureza::text, COALESCE(SUM(valor_aberto),0)::float AS valor
+      `SELECT ${PREV_EF_T}::text AS dia, natureza::text, COALESCE(SUM(valor_aberto),0)::float AS valor
        FROM ${TITULO_RATEADO} t
-       WHERE ${PREV_T} BETWEEN GREATEST(${pFrom}::date, ${HOJE_SQL}) AND ${pTo}::date
+       WHERE ${PREV_EF_T} BETWEEN GREATEST(${pFrom}::date, ${HOJE_SQL}) AND ${pTo}::date
          AND valor_aberto > 0
          AND status::text NOT IN ('CANCELADO','PAGO','RECEBIDO','LIQUIDADO')
          ${dimSql(p, filter, tituloCols())}
@@ -876,9 +878,9 @@ async function getFluxoDiarioMesSemCache(from: string, to: string, filter?: DimF
 }
 
 // Atrasado × a vencer pelo status da Omie, não pela data: um boleto "A vencer
-// (D+1)" com vencimento ontem continua a vencer no ERP.
+// (D+1)" com vencimento ontem continua a vencer no ERP (ver boletoD1Sql).
 function agingStatusClause(natureza: "R" | "P", atrasado: boolean) {
-  return atrasado ? `AND t.status = 'ATRASADO'` : `AND t.status <> 'ATRASADO' AND t.status ${openClause(natureza)}`;
+  return atrasado ? `AND ${ATRASADO_T}` : `AND NOT ${ATRASADO_T} AND t.status ${openClause(natureza)}`;
 }
 
 async function getAgingBiSemCache(natureza: "R" | "P", atrasado: boolean, filter?: DimFilter): Promise<AgingSlice[]> {
@@ -1288,7 +1290,7 @@ async function getInadimplenciaMensalSemCache(filter?: DimFilter) {
   return query<{ mes: string; taxa: number }>(
     `SELECT to_char(date_trunc('month', t.data_vencimento), 'YYYY-MM') AS mes,
             CASE WHEN SUM(t.valor_titulo)=0 THEN 0
-                 ELSE SUM(t.valor_aberto) FILTER (WHERE t.status='ATRASADO') / NULLIF(SUM(t.valor_titulo),0)
+                 ELSE SUM(t.valor_aberto) FILTER (WHERE ${ATRASADO_T}) / NULLIF(SUM(t.valor_titulo),0)
             END::float AS taxa
      FROM ${TITULO_RATEADO} t
      WHERE t.natureza='R' AND t.data_vencimento >= ${fromP}::date
