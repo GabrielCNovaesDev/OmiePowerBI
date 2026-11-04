@@ -67,7 +67,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     return (
       <html lang="pt-BR">
         <body className={bodyClass}>
-          <AdminShell userName={tenantName} papel={papel} pathname={pathname}>
+          <AdminShell userName={tenantName} papel={papel}>
             {children}
           </AdminShell>
         </body>

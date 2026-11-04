@@ -1,46 +1,22 @@
 import Link from "next/link";
 import { BrandMark } from "@/components/brand";
 import { SessionMenu } from "@/components/session-menu";
-import { cn } from "@/lib/format";
-
-const LINKS = [
-  { href: "/admin", label: "Painel" },
-  { href: "/admin/aplicativos", label: "Empresas Omie" },
-  { href: "/admin/usuarios", label: "Usuários" },
-  { href: "/admin/sync", label: "Atualização" },
-];
+import { AdminNav } from "@/components/admin-nav";
 
 export function AdminShell({
   children,
   userName,
   papel,
-  pathname,
 }: {
   children: React.ReactNode;
   userName?: string | null;
   papel?: string | null;
-  pathname: string;
 }) {
   return (
     <div className="min-h-screen bg-bg">
       <header className="sticky top-0 z-20 flex flex-wrap items-center gap-4 border-b border-black/20 bg-header px-4 py-3">
         <BrandMark />
-        <nav className="flex flex-wrap gap-1">
-          {LINKS.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "rounded-full border px-3 py-1 text-xs",
-                pathname === item.href
-                  ? "border-cyan bg-cyan text-white"
-                  : "border-white/20 text-white/80 hover:bg-white/10"
-              )}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
+        <AdminNav />
         <div className="ml-auto text-right text-[11px] text-white/60">
           <Link href="/" className="text-cyan hover:underline">
             Voltar ao BI
