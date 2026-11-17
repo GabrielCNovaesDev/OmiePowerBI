@@ -42,7 +42,9 @@ const MESES = ["JANEIRO", "FEVEREIRO", "MARÇO", "ABRIL", "MAIO", "JUNHO", "JULH
 const norm = (s: string) =>
   s.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/\s+/g, " ").trim();
 
-type Bloco = "receb" | "pag" | "divida" | "invest" | "distrib" | "naoclass" | "transf";
+const PREV_TRANSF = "@a-realizar";
+
+type Bloco ="receb" | "pag" | "divida" | "invest" | "distrib" | "naoclass" | "transf";
 
 function blocoDe(classificacao: string | null, tipo: string | null, entrada: boolean): Bloco {
   const c = norm(classificacao ?? "");
@@ -78,16 +80,20 @@ async function getFluxoLivreSemCache(ano: number, filter?: DimFilter): Promise<F
   const bReal = new Binder();
   const pDe = bReal.add(de);
   const pAte = bReal.add(ate);
-  const realRows = await query<{ col: string; app_key: string; codigo: string | null; transf: string; v: number }>(
+  // Transferências abrem por rota: a Omie grava "Transf. <origem> >> <destino>" no
+  // nome do movimento.
+  const realRows = await query<{ col: string; app_key: string; codigo: string | null; transf: string; rota: string | null; v: number }>(
     `SELECT to_char(e.data_lancamento, 'YYYY-MM') AS col, e.app_key, e.codigo_categoria AS codigo,
-            COALESCE(c.transferencia, 'N') AS transf, SUM(e.valor_documento)::float AS v
+            COALESCE(c.transferencia, 'N') AS transf,
+            CASE WHEN c.transferencia = 'S' THEN COALESCE(e.nome_cliente, '') END AS rota,
+            SUM(e.valor_documento)::float AS v
      FROM ${EXTRATO_RATEADO} e
      LEFT JOIN dim.categoria c ON c.app_key=e.app_key AND c.codigo=e.codigo_categoria
      WHERE e.data_lancamento BETWEEN ${pDe}::date AND ${pAte}::date
        AND COALESCE(e.codigo_lancamento,0) <> 0
        AND COALESCE(e.situacao,'') <> 'Previsto'
        ${dimSql(bReal, filter, { appKey: "e.app_key", cliente: "e.codigo_cliente_omie", categoria: "e.codigo_categoria", conta: "e.codigo_cc_omie" })}
-     GROUP BY 1,2,3,4`,
+     GROUP BY 1,2,3,4,5`,
     bReal.values
   );
 
@@ -162,8 +168,13 @@ async function getFluxoLivreSemCache(ano: number, filter?: DimFilter): Promise<F
 
   // folhas = categorias ajustadas, já com o bloco e o subgrupo do de/para
   const folhas = new Map<string, { bloco: Bloco; sub: string; cat: string; id: string; codigos: Set<string> }>();
-  const folhaDe = (app: string, codigo: string | null, transf: string) => {
-    if (transf === "S") return { bloco: "transf" as Bloco, sub: "", cat: descr.get(`${app}|${codigo}`) ?? "Transferência" };
+  const folhaDe = (app: string, codigo: string | null, transf: string, rota?: string | null) => {
+    if (transf === "S") {
+      const nomeCat = descr.get(`${app}|${codigo}`) ?? "Transferência";
+      if (rota === undefined || rota === null) return { bloco: "transf" as Bloco, sub: nomeCat, cat: `${nomeCat} (a realizar)` };
+      const r = rota.replace(/^\s*transf\.?\s*/i, "").split(/\s*>>\s*/).filter(Boolean).join(" → ");
+      return { bloco: "transf" as Bloco, sub: nomeCat, cat: r || "(sem descrição)" };
+    }
     const m = codigo ? porCodigo.get(`${app}|${codigo}`) : undefined;
     const entrada = String(codigo ?? "").startsWith("1.");
     if (!m) {
@@ -173,14 +184,20 @@ async function getFluxoLivreSemCache(ano: number, filter?: DimFilter): Promise<F
     }
     return { bloco: blocoDe(m.classificacao, m.tipo, entrada), sub: m.subgrupo, cat: m.categoria_ajustada };
   };
-  const linhaFolha = (app: string, codigo: string | null, transf: string) => {
-    const f = folhaDe(app, codigo, transf);
+  // Códigos "app|categoria"; nas rotas de transferência, "app|categoria|nome do movimento".
+  const linhaFolha = (app: string, codigo: string | null, transf: string, rota?: string | null) => {
+    const f = folhaDe(app, codigo, transf, rota);
     const subId = f.sub ? `${f.bloco}/${norm(f.sub)}` : f.bloco;
     const id = `${subId}/${norm(f.cat)}`;
     if (!folhas.has(id)) folhas.set(id, { ...f, id, codigos: new Set() });
-    folhas.get(id)!.codigos.add(`${app}|${codigo ?? ""}`);
+    const base = `${app}|${codigo ?? ""}`;
+    // transferência a realizar: marcador próprio para o detalhe não puxar o realizado
+    folhas.get(id)!.codigos.add(transf !== "S" ? base : rota === undefined || rota === null ? `${base}|${PREV_TRANSF}` : `${base}|${rota}`);
     return id;
   };
+  const codigosBase = (fs: Array<{ codigos: Set<string> }>) => [
+    ...new Set(fs.flatMap((f) => [...f.codigos].map((c) => c.split("|").slice(0, 2).join("|")))),
+  ];
 
   const valoresFolha = new Map<string, Record<string, FclValor>>();
   const acumula = (id: string, col: string, campo: "real" | "prev", v: number) => {
@@ -189,7 +206,7 @@ async function getFluxoLivreSemCache(ano: number, filter?: DimFilter): Promise<F
     cell[campo] = (cell[campo] ?? 0) + v;
     valoresFolha.set(id, vals);
   };
-  for (const r of realRows) if (r.v) acumula(linhaFolha(r.app_key, r.codigo, r.transf), r.col, "real", n(r.v));
+  for (const r of realRows) if (r.v) acumula(linhaFolha(r.app_key, r.codigo, r.transf, r.rota), r.col, "real", n(r.v));
   for (const r of prevRows) if (r.v) acumula(linhaFolha(r.app_key, r.codigo, r.transf), r.col, "prev", n(r.v));
   const folhasPorBloco = (b: Bloco) => [...folhas.values()].filter((f) => f.bloco === b);
 
@@ -216,7 +233,7 @@ async function getFluxoLivreSemCache(ano: number, filter?: DimFilter): Promise<F
   for (const b of BLOCOS) {
     const fs = folhasPorBloco(b.id);
     if (!fs.length && (b.id === "naoclass" || b.id === "transf")) continue;
-    const g: FclLinha = { id: b.id, rotulo: b.rotulo, nivel: 0, tipo: "grupo", valores: vazio(), codigos: [...new Set(fs.flatMap((f) => [...f.codigos]))] };
+    const g: FclLinha = { id: b.id, rotulo: b.rotulo, nivel: 0, tipo: "grupo", valores: vazio(), codigos: codigosBase(fs) };
     blocoLinha[b.id] = g;
     const blocoFilhos: FclLinha[] = [];
     const subs = [...new Set(fs.map((f) => f.sub))].filter(Boolean);
@@ -232,7 +249,7 @@ async function getFluxoLivreSemCache(ano: number, filter?: DimFilter): Promise<F
       for (const s of subs.sort((a, b2) => a.localeCompare(b2, "pt-BR"))) {
         const subId = `${b.id}/${norm(s)}`;
         const doSub = fs.filter((f) => f.sub === s);
-        const sl: FclLinha = { id: subId, rotulo: s, nivel: 1, tipo: "subgrupo", pai: b.id, valores: vazio(), codigos: [...new Set(doSub.flatMap((f) => [...f.codigos]))] };
+        const sl: FclLinha = { id: subId, rotulo: s, nivel: 1, tipo: "subgrupo", pai: b.id, valores: vazio(), codigos: codigosBase(doSub) };
         const filhas = pushFolhas(doSub, subId, 2);
         for (const f of filhas) somaEm(sl, f.valores);
         blocoFilhos.push(sl, ...filhas);
@@ -301,7 +318,9 @@ async function getFluxoLivreSemCache(ano: number, filter?: DimFilter): Promise<F
   return { ano, colunas, linhas: final, semDepara: mapa.length === 0, naoClassificadas: [...naoClass].sort() };
 }
 
-export const getFluxoLivre = cacheDados("getFluxoLivre", getFluxoLivreSemCache);
+// sufixo de versão: muda quando o formato do resultado muda, para o cache não
+// servir a estrutura antiga depois do deploy
+export const getFluxoLivre = cacheDados("getFluxoLivre:v2", getFluxoLivreSemCache);
 
 // Detalhe de uma célula: os lançamentos que formam o valor, com as mesmas regras
 // do quadro (extrato realizado com rateio; títulos em aberto pela previsão, os
@@ -336,11 +355,25 @@ export async function getFclDetalhe(
   const mes = /^\d{4}-\d{2}$/.test(col) ? col : null;
   const partes: Promise<LinhaDetalheSql[]>[] = [];
 
-  if (campo !== "prev" && col !== "VENC") {
+  // base "app|cat" = categoria inteira; "app|cat|<nome>" = rota de transferência (só
+  // extrato); "app|cat|@a-realizar" = transferência a realizar (só títulos).
+  const base: string[] = [];
+  const rotas: string[] = [];
+  const prevTransf: string[] = [];
+  for (const c of codigos) {
+    const [app, cat, ...resto] = c.split("|");
+    const b2 = `${app}|${cat ?? ""}`;
+    if (!resto.length) base.push(b2);
+    else if (resto.join("|") === PREV_TRANSF) prevTransf.push(b2);
+    else rotas.push(c);
+  }
+
+  if (campo !== "prev" && col !== "VENC" && (base.length || rotas.length)) {
     const b = new Binder();
     const pDe = b.add(de);
     const pAte = b.add(ate);
-    const pCods = b.add(codigos);
+    const pBase = b.add(base);
+    const pRotas = b.add(rotas);
     const pMes = mes ? b.add(mes) : null;
     partes.push(
       query<LinhaDetalheSql>(
@@ -359,7 +392,8 @@ export async function getFclDetalhe(
            ${pMes ? `AND to_char(e.data_lancamento, 'YYYY-MM') = ${pMes}` : ""}
            AND COALESCE(e.codigo_lancamento,0) <> 0
            AND COALESCE(e.situacao,'') <> 'Previsto'
-           AND (e.app_key || '|' || COALESCE(e.codigo_categoria,'')) = ANY(${pCods}::text[])
+           AND ((e.app_key || '|' || COALESCE(e.codigo_categoria,'')) = ANY(${pBase}::text[])
+             OR (e.app_key || '|' || COALESCE(e.codigo_categoria,'') || '|' || COALESCE(e.nome_cliente,'')) = ANY(${pRotas}::text[]))
            AND e.valor_documento <> 0
            ${dimSql(b, filter, { appKey: "e.app_key", cliente: "e.codigo_cliente_omie", categoria: "e.codigo_categoria", conta: "e.codigo_cc_omie" })}
          ORDER BY e.data_lancamento, e.valor_documento
@@ -369,10 +403,10 @@ export async function getFclDetalhe(
     );
   }
 
-  if (campo !== "real") {
+  if (campo !== "real" && (base.length || prevTransf.length)) {
     const prev = previsaoEfetivaSql("t");
     const b = new Binder();
-    const pCods = b.add(codigos);
+    const pCods = b.add([...base, ...prevTransf]);
     let quando: string;
     if (col === "VENC") quando = `${prev} < ${HOJE_SQL}`;
     else if (mes) quando = `${prev} >= ${HOJE_SQL} AND to_char(${prev}, 'YYYY-MM') = ${b.add(mes)}`;

@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useCallback, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { cn } from "@/lib/format";
 import type { FclColuna, FclLinha, FluxoLivre } from "@/lib/fluxo-livre";
@@ -36,6 +36,30 @@ function subsDa(c: FclColuna, ativos: Sub[]): Sub[] {
   if (c.tipo === "mes" && !c.fechado && !c.atual) return ativos.filter((s) => s !== "real");
   if (c.tipo === "mes" && c.fechado) return ativos.filter((s) => s !== "prev");
   return ativos;
+}
+
+// Média mensal: realizado = média dos meses fechados; projetado = média dos 12
+// meses (realizado + a realizar, sem o vencido). Saldos não têm média.
+const LARG_MEDIA = 104;
+
+function mediaDe(l: FclLinha, s: Sub, colunas: FclColuna[]): number | null {
+  if (l.tipo === "saldo") return null;
+  const meses = colunas.filter((c) => c.tipo === "mes" && (s !== "real" || c.fechado));
+  if (!meses.length) return null;
+  let t = 0;
+  let algum = false;
+  for (const c of meses) {
+    const v = valorDe(l, c, s);
+    if (v !== null) {
+      t += v;
+      algum = true;
+    }
+  }
+  return algum ? t / meses.length : null;
+}
+
+function fundo(l: FclLinha): string {
+  return l.tipo === "saldo" ? "bg-header" : l.tipo === "total" ? "bg-[#e3f1ea]" : l.tipo === "grupo" ? "bg-paper" : "bg-card";
 }
 
 export function FluxoLivreTabela({ dados }: { dados: FluxoLivre }) {
@@ -84,6 +108,19 @@ export function FluxoLivreTabela({ dados }: { dados: FluxoLivre }) {
     setAtivos((a) => (a.includes(s) ? (a.length > 1 ? a.filter((x) => x !== s) : a) : (["real", "prev", "proj"] as Sub[]).filter((x) => x === s || a.includes(x))));
 
   const cols = dados.colunas.map((c) => ({ c, subs: subsDa(c, ativos) })).filter((x) => x.subs.length);
+  const subsMedia = ativos.filter((s) => s !== "prev");
+
+  // a média fica presa logo depois da coluna de nomes, que tem largura variável
+  const thNome = useRef<HTMLTableCellElement>(null);
+  const [largNome, setLargNome] = useState(260);
+  useEffect(() => {
+    const el = thNome.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setLargNome(el.getBoundingClientRect().width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const estiloMedia = (i: number) => ({ left: largNome + i * LARG_MEDIA, width: LARG_MEDIA, minWidth: LARG_MEDIA, maxWidth: LARG_MEDIA });
 
   return (
     <div className="space-y-3">
@@ -115,9 +152,19 @@ export function FluxoLivreTabela({ dados }: { dados: FluxoLivre }) {
         <table className="min-w-full border-collapse text-[12px] tabular-nums">
           <thead>
             <tr className="bg-header text-white">
-              <th rowSpan={2} className="sticky left-0 z-10 min-w-[260px] bg-header px-3 py-2 text-left text-[11px] font-medium uppercase tracking-[0.08em]">
+              <th ref={thNome} rowSpan={2} className="sticky left-0 z-10 min-w-[260px] bg-header px-3 py-2 text-left text-[11px] font-medium uppercase tracking-[0.08em]">
                 Fluxo de caixa livre
               </th>
+              {subsMedia.length ? (
+                <th
+                  colSpan={subsMedia.length}
+                  className="sticky z-10 border-l border-white/15 bg-header px-2 py-1.5 text-center text-[11px] font-medium shadow-[2px_0_0_0_rgba(0,0,0,0.12)]"
+                  style={{ left: largNome }}
+                  title="Realizado: média dos meses fechados. Projetado: média dos 12 meses (realizado + a realizar)."
+                >
+                  MÉDIA MENSAL
+                </th>
+              ) : null}
               {cols.map(({ c, subs }) => (
                 <th
                   key={c.id}
@@ -130,6 +177,19 @@ export function FluxoLivreTabela({ dados }: { dados: FluxoLivre }) {
               ))}
             </tr>
             <tr className="bg-paper text-mist">
+              {subsMedia.map((s, i) => (
+                <th
+                  key={`media-${s}`}
+                  className={cn(
+                    "sticky z-10 bg-paper px-2 py-1 text-right text-[10px] font-medium",
+                    i === 0 && "border-l border-line",
+                    i === subsMedia.length - 1 && "shadow-[2px_0_0_0_rgba(0,0,0,0.12)]"
+                  )}
+                  style={estiloMedia(i)}
+                >
+                  {SUB_ROTULO[s]}
+                </th>
+              ))}
               {cols.flatMap(({ c, subs }) =>
                 subs.map((s, i) => (
                   <th key={`${c.id}-${s}`} className={cn("px-2 py-1 text-right text-[10px] font-medium", i === 0 && "border-l border-line")}>
@@ -155,7 +215,7 @@ export function FluxoLivreTabela({ dados }: { dados: FluxoLivre }) {
               return (
                 <tr key={l.id} className={cn("border-t border-line", estilo)}>
                   <td
-                    className={cn("sticky left-0 z-[1] whitespace-nowrap px-3 py-1.5", l.tipo === "saldo" ? "bg-header" : l.tipo === "total" ? "bg-[#e3f1ea]" : l.tipo === "grupo" ? "bg-paper" : "bg-card")}
+                    className={cn("sticky left-0 z-[1] whitespace-nowrap px-3 py-1.5", fundo(l))}
                     style={{ paddingLeft: 12 + l.nivel * 18 }}
                   >
                     {temFilhos ? (
@@ -171,6 +231,25 @@ export function FluxoLivreTabela({ dados }: { dados: FluxoLivre }) {
                     ) : null}
                     {l.rotulo}
                   </td>
+                  {subsMedia.map((s, i) => {
+                    const v = mediaDe(l, s, dados.colunas);
+                    const neg = v !== null && v < -0.005;
+                    return (
+                      <td
+                        key={`media-${s}`}
+                        className={cn(
+                          "sticky z-[1] whitespace-nowrap px-2 py-1.5 text-right",
+                          fundo(l),
+                          i === 0 && "border-l border-line",
+                          i === subsMedia.length - 1 && "shadow-[2px_0_0_0_rgba(0,0,0,0.12)]",
+                          neg && "text-loss"
+                        )}
+                        style={estiloMedia(i)}
+                      >
+                        {fmt(v, emMil)}
+                      </td>
+                    );
+                  })}
                   {cols.map(({ c, subs }) => (
                     <Fragment key={c.id}>
                       {subs.map((s, i) => {
