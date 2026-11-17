@@ -23,7 +23,9 @@ export default async function FluxoLivrePage({
       <PageHeader
         kicker="Dashboards"
         title="Fluxo de Caixa Livre"
-        subtitle={`${ano} · realizado do extrato + a realizar dos títulos em aberto pela previsão`}
+        subtitle={`${ano} · realizado do extrato + a realizar dos títulos em aberto pela previsão · ${
+          filter.contas?.length ? "contas escolhidas no filtro" : "todas as contas"
+        }`}
       />
       <div className="flex flex-wrap gap-2">
         {[anoAtual - 1, anoAtual, anoAtual + 1].map((a) => (
