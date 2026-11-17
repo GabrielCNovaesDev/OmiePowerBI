@@ -1,8 +1,10 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useCallback, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { cn } from "@/lib/format";
 import type { FclColuna, FclLinha, FluxoLivre } from "@/lib/fluxo-livre";
+import { FluxoLivreDetalhe, type FclCelula } from "@/components/fluxo-livre-detalhe";
 
 type Sub = "real" | "prev" | "proj";
 
@@ -39,6 +41,18 @@ function subsDa(c: FclColuna, ativos: Sub[]): Sub[] {
 export function FluxoLivreTabela({ dados }: { dados: FluxoLivre }) {
   const [ativos, setAtivos] = useState<Sub[]>(["real", "prev", "proj"]);
   const [emMil, setEmMil] = useState(false);
+  const [celula, setCelula] = useState<FclCelula | null>(null);
+  const fecharDetalhe = useCallback(() => setCelula(null), []);
+  const params = useSearchParams();
+
+  const abrirDetalhe = (l: FclLinha, c: FclColuna, s: Sub, v: number | null) => {
+    const q = new URLSearchParams(params.toString());
+    q.set("ano", String(dados.ano));
+    q.set("col", c.id);
+    q.set("campo", c.tipo === "venc" ? "prev" : s);
+    for (const cod of l.codigos ?? []) q.append("cod", cod);
+    setCelula({ linha: l.rotulo, coluna: c.rotulo, campo: c.tipo === "venc" ? "prev" : s, valorQuadro: v, query: q.toString() });
+  };
   const [fechados, setFechados] = useState<Record<string, boolean>>(() => {
     const f: Record<string, boolean> = {};
     for (const l of dados.linhas) if (l.tipo === "subgrupo") f[l.id] = true;
@@ -162,6 +176,7 @@ export function FluxoLivreTabela({ dados }: { dados: FluxoLivre }) {
                       {subs.map((s, i) => {
                         const v = valorDe(l, c, s);
                         const neg = v !== null && v < -0.005;
+                        const clicavel = Boolean(l.codigos?.length) && v !== null && Math.abs(v) >= 0.005;
                         return (
                           <td
                             key={s}
@@ -173,7 +188,18 @@ export function FluxoLivreTabela({ dados }: { dados: FluxoLivre }) {
                               neg && l.tipo === "saldo" && "text-[#ffb4b4]"
                             )}
                           >
-                            {fmt(v, emMil)}
+                            {clicavel ? (
+                              <button
+                                type="button"
+                                onClick={() => abrirDetalhe(l, c, s, v)}
+                                title="Ver lançamentos"
+                                className="cursor-pointer underline-offset-2 hover:text-cyan-2 hover:underline"
+                              >
+                                {fmt(v, emMil)}
+                              </button>
+                            ) : (
+                              fmt(v, emMil)
+                            )}
                           </td>
                         );
                       })}
@@ -185,6 +211,8 @@ export function FluxoLivreTabela({ dados }: { dados: FluxoLivre }) {
           </tbody>
         </table>
       </div>
+      <p className="text-[11px] text-mist">Clique em um valor de grupo, subgrupo ou categoria para ver os lançamentos que o compõem.</p>
+      {celula ? <FluxoLivreDetalhe celula={celula} onFechar={fecharDetalhe} /> : null}
     </div>
   );
 }

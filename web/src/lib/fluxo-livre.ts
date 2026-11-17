@@ -25,6 +25,9 @@ export type FclLinha = {
   tipo: "saldo" | "grupo" | "total" | "subgrupo" | "conta";
   pai?: string;
   valores: Record<string, FclValor>;
+  // "app_key|codigo_categoria" que compõem a linha (vazio depois do | = sem categoria);
+  // é o que o detalhe de lançamentos consulta.
+  codigos?: string[];
 };
 export type FluxoLivre = {
   ano: number;
@@ -158,7 +161,7 @@ async function getFluxoLivreSemCache(ano: number, filter?: DimFilter): Promise<F
   };
 
   // folhas = categorias ajustadas, já com o bloco e o subgrupo do de/para
-  const folhas = new Map<string, { bloco: Bloco; sub: string; cat: string; id: string }>();
+  const folhas = new Map<string, { bloco: Bloco; sub: string; cat: string; id: string; codigos: Set<string> }>();
   const folhaDe = (app: string, codigo: string | null, transf: string) => {
     if (transf === "S") return { bloco: "transf" as Bloco, sub: "", cat: descr.get(`${app}|${codigo}`) ?? "Transferência" };
     const m = codigo ? porCodigo.get(`${app}|${codigo}`) : undefined;
@@ -174,7 +177,8 @@ async function getFluxoLivreSemCache(ano: number, filter?: DimFilter): Promise<F
     const f = folhaDe(app, codigo, transf);
     const subId = f.sub ? `${f.bloco}/${norm(f.sub)}` : f.bloco;
     const id = `${subId}/${norm(f.cat)}`;
-    if (!folhas.has(id)) folhas.set(id, { ...f, id });
+    if (!folhas.has(id)) folhas.set(id, { ...f, id, codigos: new Set() });
+    folhas.get(id)!.codigos.add(`${app}|${codigo ?? ""}`);
     return id;
   };
 
@@ -212,14 +216,14 @@ async function getFluxoLivreSemCache(ano: number, filter?: DimFilter): Promise<F
   for (const b of BLOCOS) {
     const fs = folhasPorBloco(b.id);
     if (!fs.length && (b.id === "naoclass" || b.id === "transf")) continue;
-    const g: FclLinha = { id: b.id, rotulo: b.rotulo, nivel: 0, tipo: "grupo", valores: vazio() };
+    const g: FclLinha = { id: b.id, rotulo: b.rotulo, nivel: 0, tipo: "grupo", valores: vazio(), codigos: [...new Set(fs.flatMap((f) => [...f.codigos]))] };
     blocoLinha[b.id] = g;
     const blocoFilhos: FclLinha[] = [];
     const subs = [...new Set(fs.map((f) => f.sub))].filter(Boolean);
     const pushFolhas = (lista: typeof fs, pai: string, nivel: number) => {
       const out: FclLinha[] = [];
       for (const f of lista.sort((a, b2) => a.cat.localeCompare(b2.cat, "pt-BR"))) {
-        const l: FclLinha = { id: f.id, rotulo: f.cat, nivel, tipo: "conta", pai, valores: valoresFolha.get(f.id) ?? {} };
+        const l: FclLinha = { id: f.id, rotulo: f.cat, nivel, tipo: "conta", pai, valores: valoresFolha.get(f.id) ?? {}, codigos: [...f.codigos] };
         out.push(l);
       }
       return out;
@@ -227,8 +231,9 @@ async function getFluxoLivreSemCache(ano: number, filter?: DimFilter): Promise<F
     if (subs.length) {
       for (const s of subs.sort((a, b2) => a.localeCompare(b2, "pt-BR"))) {
         const subId = `${b.id}/${norm(s)}`;
-        const sl: FclLinha = { id: subId, rotulo: s, nivel: 1, tipo: "subgrupo", pai: b.id, valores: vazio() };
-        const filhas = pushFolhas(fs.filter((f) => f.sub === s), subId, 2);
+        const doSub = fs.filter((f) => f.sub === s);
+        const sl: FclLinha = { id: subId, rotulo: s, nivel: 1, tipo: "subgrupo", pai: b.id, valores: vazio(), codigos: [...new Set(doSub.flatMap((f) => [...f.codigos]))] };
+        const filhas = pushFolhas(doSub, subId, 2);
         for (const f of filhas) somaEm(sl, f.valores);
         blocoFilhos.push(sl, ...filhas);
         somaEm(g, sl.valores);
@@ -297,3 +302,130 @@ async function getFluxoLivreSemCache(ano: number, filter?: DimFilter): Promise<F
 }
 
 export const getFluxoLivre = cacheDados("getFluxoLivre", getFluxoLivreSemCache);
+
+// Detalhe de uma célula: os lançamentos que formam o valor, com as mesmas regras
+// do quadro (extrato realizado com rateio; títulos em aberto pela previsão, os
+// já vencidos na coluna VENC).
+export type FclLancamento = {
+  origem: "real" | "prev";
+  data: string;
+  pessoa: string | null;
+  documento: string | null;
+  descricao: string | null;
+  categoria: string | null;
+  conta: string | null;
+  status: string | null;
+  fator: number;
+  valor: number;
+};
+export type FclDetalhe = { linhas: FclLancamento[]; qtd: number; total: number; limite: number };
+
+const LIMITE_DETALHE = 1000;
+
+type LinhaDetalheSql = FclLancamento & { qtd: number; total: number };
+
+export async function getFclDetalhe(
+  ano: number,
+  filter: DimFilter,
+  codigos: string[],
+  col: string,
+  campo: "real" | "prev" | "proj"
+): Promise<FclDetalhe> {
+  const de = `${ano}-01-01`;
+  const ate = `${ano}-12-31`;
+  const mes = /^\d{4}-\d{2}$/.test(col) ? col : null;
+  const partes: Promise<LinhaDetalheSql[]>[] = [];
+
+  if (campo !== "prev" && col !== "VENC") {
+    const b = new Binder();
+    const pDe = b.add(de);
+    const pAte = b.add(ate);
+    const pCods = b.add(codigos);
+    const pMes = mes ? b.add(mes) : null;
+    partes.push(
+      query<LinhaDetalheSql>(
+        `SELECT 'real' AS origem, e.data_lancamento::text AS data,
+                COALESCE(NULLIF(e.razao_social_cliente,''), NULLIF(e.nome_cliente,''), cli.razao_social) AS pessoa,
+                NULLIF(concat_ws(' ', NULLIF(e.tipo_documento,''), NULLIF(e.numero_documento,''),
+                       CASE WHEN NULLIF(e.numero_parcela,'') IS NOT NULL THEN 'parc. ' || e.numero_parcela END), '') AS documento,
+                NULLIF(e.observacoes,'') AS descricao, cat.descricao AS categoria, cc.descricao AS conta,
+                e.situacao AS status, e.fator::float AS fator, e.valor_documento::float AS valor,
+                COUNT(*) OVER ()::int AS qtd, SUM(e.valor_documento) OVER ()::float AS total
+         FROM ${EXTRATO_RATEADO} e
+         LEFT JOIN dim.categoria cat ON cat.app_key=e.app_key AND cat.codigo=e.codigo_categoria
+         LEFT JOIN dim.conta_corrente cc ON cc.app_key=e.app_key AND cc.codigo_cc_omie=e.codigo_cc_omie
+         LEFT JOIN dim.cliente cli ON cli.app_key=e.app_key AND cli.codigo_cliente_omie=e.codigo_cliente_omie
+         WHERE e.data_lancamento BETWEEN ${pDe}::date AND ${pAte}::date
+           ${pMes ? `AND to_char(e.data_lancamento, 'YYYY-MM') = ${pMes}` : ""}
+           AND COALESCE(e.codigo_lancamento,0) <> 0
+           AND COALESCE(e.situacao,'') <> 'Previsto'
+           AND (e.app_key || '|' || COALESCE(e.codigo_categoria,'')) = ANY(${pCods}::text[])
+           AND e.valor_documento <> 0
+           ${dimSql(b, filter, { appKey: "e.app_key", cliente: "e.codigo_cliente_omie", categoria: "e.codigo_categoria", conta: "e.codigo_cc_omie" })}
+         ORDER BY e.data_lancamento, e.valor_documento
+         LIMIT ${LIMITE_DETALHE}`,
+        b.values
+      )
+    );
+  }
+
+  if (campo !== "real") {
+    const prev = previsaoEfetivaSql("t");
+    const b = new Binder();
+    const pCods = b.add(codigos);
+    let quando: string;
+    if (col === "VENC") quando = `${prev} < ${HOJE_SQL}`;
+    else if (mes) quando = `${prev} >= ${HOJE_SQL} AND to_char(${prev}, 'YYYY-MM') = ${b.add(mes)}`;
+    else quando = `(${prev} < ${HOJE_SQL} OR ${prev} BETWEEN ${b.add(de)}::date AND ${b.add(ate)}::date)`;
+    partes.push(
+      query<LinhaDetalheSql>(
+        `SELECT 'prev' AS origem, ${prev}::text AS data, cli.razao_social AS pessoa,
+                NULLIF(concat_ws(' ', NULLIF(t.numero_documento,''),
+                       CASE WHEN NULLIF(t.numero_parcela,'') IS NOT NULL THEN 'parc. ' || t.numero_parcela END,
+                       CASE WHEN NULLIF(t.numero_documento_fiscal,'') IS NOT NULL THEN 'NF ' || t.numero_documento_fiscal END), '') AS documento,
+                NULLIF(t.observacao,'') AS descricao, cat.descricao AS categoria, cc.descricao AS conta,
+                t.status::text AS status, t.fator::float AS fator,
+                (CASE WHEN t.natureza='R' THEN t.valor_aberto ELSE -t.valor_aberto END)::float AS valor,
+                COUNT(*) OVER ()::int AS qtd,
+                SUM(CASE WHEN t.natureza='R' THEN t.valor_aberto ELSE -t.valor_aberto END) OVER ()::float AS total
+         FROM ${TITULO_RATEADO} t
+         LEFT JOIN dim.categoria cat ON cat.app_key=t.app_key AND cat.codigo=t.codigo_categoria
+         LEFT JOIN dim.conta_corrente cc ON cc.app_key=t.app_key AND cc.codigo_cc_omie=t.codigo_cc_omie
+         LEFT JOIN dim.cliente cli ON cli.app_key=t.app_key AND cli.codigo_cliente_omie=t.codigo_cliente_omie
+         WHERE t.valor_aberto > 0
+           AND ((t.natureza='R' AND t.status::text NOT IN ('CANCELADO','RECEBIDO','LIQUIDADO'))
+             OR (t.natureza='P' AND t.status::text NOT IN ('CANCELADO','PAGO','LIQUIDADO')))
+           AND ${quando}
+           AND (t.app_key || '|' || COALESCE(t.codigo_categoria,'')) = ANY(${pCods}::text[])
+           ${dimSql(b, filter, { appKey: "t.app_key", cliente: "t.codigo_cliente_omie", categoria: "t.codigo_categoria", conta: "t.codigo_cc_omie", departamento: "t.codigo_departamento" })}
+         ORDER BY 2, valor
+         LIMIT ${LIMITE_DETALHE}`,
+        b.values
+      )
+    );
+  }
+
+  const res = await Promise.all(partes);
+  let qtd = 0;
+  let total = 0;
+  const linhas: FclLancamento[] = [];
+  for (const rows of res) {
+    qtd += n(rows[0]?.qtd);
+    total += n(rows[0]?.total);
+    for (const r of rows) {
+      linhas.push({
+        origem: r.origem,
+        data: r.data,
+        pessoa: r.pessoa,
+        documento: r.documento,
+        descricao: r.descricao,
+        categoria: r.categoria,
+        conta: r.conta,
+        status: r.status,
+        fator: n(r.fator) || 1,
+        valor: n(r.valor),
+      });
+    }
+  }
+  return { linhas, qtd, total, limite: LIMITE_DETALHE };
+}
